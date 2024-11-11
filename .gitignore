@@ -1,0 +1,5 @@
+# Ignore everything inside top-level directories
+*/**
+
+# Don't ignore index.php inside any top-level directory
+!*/index.php
