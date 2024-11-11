@@ -3,7 +3,7 @@
 function zipFolder($folderPath, $zipFilePath) {
     $zip = new ZipArchive();
     if ($zip->open($zipFilePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === TRUE) {
-        $folderPath = realpath($folderPath);
+        $folderPath = realpath($folderPath);  // Get the absolute path of the folder
 
         $files = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($folderPath),
@@ -25,25 +25,50 @@ function zipFolder($folderPath, $zipFilePath) {
     }
 }
 
+// Function to sanitize the folder path and prevent directory traversal
+function sanitizePath($path) {
+    // Remove any '..' or '.' from the path (directory traversal protection)
+    $path = realpath($path);  // Resolve symbolic links and absolute path
+
+    // Ensure the path does not contain any parent directories (..)
+    if ($path === false || strpos($path, '..') !== false || strpos($path, './') === 0) {
+        return false;
+    }
+
+    return $path;
+}
+
 if (isset($_GET['path'])) {
     $folderPath = $_GET['path'];
-    if (is_dir($folderPath)) {
-        // Extract the base name of the folder for the zip file name
-        $folderName = basename(realpath($folderPath));
-        $zipFilePath = tempnam(sys_get_temp_dir(), 'zip');
 
-        if (zipFolder($folderPath, $zipFilePath)) {
-            header('Content-Type: application/zip');
-            header('Content-Disposition: attachment; filename="' . $folderName . '.zip"');
-            header('Content-Length: ' . filesize($zipFilePath));
-            readfile($zipFilePath);
+    // Define the base directory you want to allow
+    $baseDir = '/sites/emcotech/audits';  // Your allowed base directory
 
-            unlink($zipFilePath); // Delete the temporary file
+    // Sanitize and resolve the provided path
+    $realFolderPath = sanitizePath($folderPath);
+
+    if ($realFolderPath !== false && strpos($realFolderPath, $baseDir . DIRECTORY_SEPARATOR) === 0) {
+        if (is_dir($realFolderPath)) {
+            // Extract the base name of the folder for the zip file name
+            $folderName = basename($realFolderPath);
+            $zipFilePath = tempnam(sys_get_temp_dir(), 'zip');
+
+            if (zipFolder($realFolderPath, $zipFilePath)) {
+                header('Content-Type: application/zip');
+                header('Content-Disposition: attachment; filename="' . $folderName . '.zip"');
+                header('Content-Length: ' . filesize($zipFilePath));
+                readfile($zipFilePath);
+
+                unlink($zipFilePath); // Delete the temporary file
+            } else {
+                echo "Error: Unable to create zip file.";
+            }
         } else {
-            echo "Error: Unable to create zip file.";
+            echo "Error: The provided path is not a directory.";
         }
     } else {
-        echo "Error: The provided path is not a directory.";
+        // Reject paths that are outside the allowed base directory
+        echo "Error: Invalid directory path. Only subdirectories are allowed.";
     }
 } else {
     echo "Error: No path provided.";
