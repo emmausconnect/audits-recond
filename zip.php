@@ -1,4 +1,7 @@
 <?php
+
+require 'helpers.php';
+
 // Function to create a zip archive of a folder
 function zipFolder($folderPath, $zipFilePath) {
     $zip = new ZipArchive();
@@ -41,11 +44,17 @@ function sanitizePath($path) {
 if (isset($_GET['path'])) {
     $folderPath = $_GET['path'];
 
-    // Define the base directory you want to allow
-    $baseDir = '/sites/emcotech/audits';  // Your allowed base directory
-
     // Sanitize and resolve the provided path
     $realFolderPath = sanitizePath($folderPath);
+
+    // Define the base directory you want to allow
+    $baseDir =  config('project_root_path');  // Allowed base directory (default is __DIR__, loaded from where config.php is)
+
+    if (config('debug')) {
+        var_dump($baseDir);
+        var_dump($realFolderPath);
+        return;
+    }
 
     if ($realFolderPath !== false && strpos($realFolderPath, $baseDir . DIRECTORY_SEPARATOR) === 0) {
         if (is_dir($realFolderPath)) {
@@ -61,16 +70,16 @@ if (isset($_GET['path'])) {
 
                 unlink($zipFilePath); // Delete the temporary file
             } else {
-                echo "Error: Unable to create zip file.";
+                echo "<pre>Error: Unable to create zip file.</pre>";
             }
         } else {
-            echo "Error: The provided path is not a directory.";
+            echo "<pre>Error: The provided path is not a directory.</pre>";
         }
     } else {
         // Reject paths that are outside the allowed base directory
-        echo "Error: Invalid directory path. Only subdirectories are allowed.";
+        echo "<pre>Error: Invalid directory path. Only subdirectories are allowed.</pre>";
     }
 } else {
-    echo "Error: No path provided.";
+    echo "<pre>Error: No path provided.</pre>";
 }
 ?>
