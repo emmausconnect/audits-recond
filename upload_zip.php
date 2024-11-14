@@ -15,6 +15,7 @@ $regions = [
     "CR" => "CRÉTEIL",
     "MA" => "MARSEILLE",
     "GR" => "GRENOBLE",
+    "LA" => "LA VILLETTE",
     "LY" => "LYON",
     "BX" => "BORDEAUX",
     "LI" => "LILLE",
