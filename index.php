@@ -1,3 +1,16 @@
+<?php
+if (!in_array($_SERVER['HTTP_HOST'], ['audit.drop.tf', 'audits.drop.tf'])) {
+    // Vérifie si on est en HTTP ou si le sous-domaine est "audit" sur "emmaus-connect.org"
+    if ((empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] !== 'on') || strpos($_SERVER['HTTP_HOST'], 'audit.emmaus-connect.org') === 0) {
+        // Remplace "audit" par "audits" dans le sous-domaine et force HTTPS
+        $newHost = str_replace('audit.', 'audits.', $_SERVER['HTTP_HOST']);
+        $url = "https://$newHost{$_SERVER['REQUEST_URI']}";
+        header("Location: $url");
+        exit;
+    }
+}
+?>
+
 <!doctype html>
 <html>
     <head>
@@ -72,19 +85,28 @@
     <body>
         <h1>AUDITS PAR RÉGION</h1>
         <p>
-            <a href="./">.</a><br />
-            ├── <a href="./BORDEAUX/">BORDEAUX</a><br />
-            ├── <a href="./CR%C3%89TEIL/">CRÉTEIL</a><br />
-            ├── <a href="./GRENOBLE/">GRENOBLE</a><br />
-            ├── <a href="./LILLE/">LILLE</a><br />
-            ├── <a href="./LYON/">LYON</a><br />
-            ├── <a href="./MAISON%20BLANCHE/">MAISON BLANCHE</a><br />
-            ├── <a href="./MARSEILLE/">MARSEILLE</a><br />
-            ├── <a href="./SAINT-DENIS/">SAINT-DENIS</a><br />
-            ├── <a href="./STRASBOURG/">STRASBOURG</a><br />
-            ├── <a href="./VICTOIRES/">VICTOIRES</a><br />
-            <!-- ├ <br />
-            └── <a href="./TEST/">TEST</a><br /> -->
+            <?php
+            $directories = glob('*', GLOB_ONLYDIR);
+            sort($directories); // Trie les dossiers par ordre alphabétique
+            $unknownRegion = null;
+
+            foreach ($directories as $directory) {
+                if (strcasecmp($directory, 'Région inconnue') === 0) {
+                    $unknownRegion = $directory; // Garde en mémoire "RÉGION INCONNUE" (insensible à la casse)
+                    continue; // Saute pour l'afficher en dernier
+                }
+                $encodedDir = htmlspecialchars($directory, ENT_QUOTES, 'UTF-8');
+                echo "├── <a href=\"./{$encodedDir}/\">{$encodedDir}</a><br />";
+            }
+
+            // Affiche "RÉGION INCONNUE" en dernier s'il a été trouvé
+            if ($unknownRegion !== null) {
+                $encodedUnknown = htmlspecialchars($unknownRegion, ENT_QUOTES, 'UTF-8');
+                echo "|";
+                echo "<br/>";
+                echo "├── <a href=\"./{$encodedUnknown}/\">RÉGION INCONNUE</a><br />";
+            }
+            ?>
         </p>
     </body>
 </html>

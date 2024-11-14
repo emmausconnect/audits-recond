@@ -328,7 +328,7 @@ if ($path != ".") {
 echo '<table id="headerTable">';
     echo '<tr class="footer">';
         echo '<td class=""><a class=""><i>Crédits — Joffrey SCHROEDER, Jean-Jacques FOUGÈRE</i></a></td>';
-        echo '<td class=""><a class=""><i>Version 1.1</i></a></td>';
+        echo '<td class=""><a class=""><i>Version 1.0</i></a></td>';
     echo "</tr>";
 echo "</table>";
 
