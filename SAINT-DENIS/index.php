@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <title>Liste des fichiers HTML</title>
     <style>
-        #fileTable {
+        #fileTable,
+        #searchResults {
             margin-bottom: 4vh;
         }
         body {
@@ -111,6 +112,31 @@ if (strpos(realpath($path), __DIR__) !== 0) {
 }
 ?>
 
+<?php
+function searchFiles($directory, $searchTerm) {
+    $results = [];
+    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory));
+
+    foreach ($iterator as $file) {
+        if ($file->isFile() && $file->getFilename() != '.' && $file->getFilename() != '..' && $file->getFilename() != 'index.php' && $file->getFilename() != 'search.php') {
+            $filePath = $file->getPathname();
+            $content = @file_get_contents($filePath);
+
+            if ($content !== false && (stripos($file->getFilename(), $searchTerm) !== false || stripos($content, $searchTerm) !== false)) {
+                $relativePath = str_replace(__DIR__ . '/', '', $filePath);
+                $results[] = [
+                    'path' => $relativePath,
+                    'name' => $file->getFilename(),
+                    'type' => getFileType($file->getFilename(), false),
+                    'timestamp' => $file->getMTime()
+                ];
+            }
+        }
+    }
+    return $results;
+}
+?>
+
 <h1 id="header">
 
     <a class="icon" href=".." title="Revenir au dossier parent">🔙</a>
@@ -139,6 +165,84 @@ if ($path != ".") {
 }
 ?>
 
+<div style="margin-bottom: 20px;">
+    <input type="text" id="searchBox" placeholder="Rechercher dans les fichiers..." style="width: calc(100% - 20px); padding: 8px; font-family: 'Courier New', Courier, monospace;">
+</div>
+
+<div id="searchResults" style="display: none;">
+    <h2>Résultats de recherche</h2>
+    <table id="searchResultsTable">
+        <thead>
+            <tr>
+                <th></th>
+                <th>Nom</th>
+                <th>Type</th>
+                <th>Date</th>
+                <th style="display: none;">Timestamp</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+let searchTimeout;
+document.getElementById('searchBox').addEventListener('input', function(e) {
+    clearTimeout(searchTimeout);
+    const searchTerm = e.target.value.trim();
+    const fileTable = document.getElementById('fileTable');
+    const searchResults = document.getElementById('searchResults');
+
+    if (searchTerm.length >= 2) {
+        searchTimeout = setTimeout(() => {
+            fetch(`search.php?term=${encodeURIComponent(searchTerm)}`)
+                .then(response => response.json())
+                .then(results => {
+                    const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
+                    searchResultsTable.innerHTML = '';
+
+                    if (results.length > 0) {
+                        fileTable.style.display = 'none';
+                        searchResults.style.display = 'block';
+
+                        results.forEach(file => {
+                            const row = document.createElement('tr');
+                            row.className = 'table-row-link';
+                            row.innerHTML = `
+                                <td class='dl-cell'><a class='download-link' title='Télécharger' href="${file.path}" download>⬇️</a></td>
+                                <td class='file-cell'>📄 <a class='file-link' href="${file.path}" target="_blank">${file.name}</a></td>
+                                <td class='type-cell'>${file.type}</td>
+                                <td class='date-cell'>${formatDate(file.timestamp)}</td>
+                                <td style='display: none;' data-timestamp="${file.timestamp}">${file.timestamp}</td>
+                            `;
+                            searchResultsTable.appendChild(row);
+                        });
+                    } else {
+                        searchResultsTable.innerHTML = '<tr><td colspan="4">Aucun résultat trouvé</td></tr>';
+                        searchResults.style.display = 'block';
+                        fileTable.style.display = 'none';
+                    }
+                });
+        }, 300);
+    } else {
+        searchResults.style.display = 'none';
+        fileTable.style.display = 'table';
+    }
+});
+
+function formatDate(timestamp) {
+    const months = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+    const date = new Date(timestamp * 1000);
+    const day = date.getDate();
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    return `${day} ${month} ${year} à ${hours}:${minutes}`;
+}
+</script>
+
 <table id="fileTable">
     <thead>
         <tr>
@@ -159,7 +263,7 @@ if ($path != ".") {
         $items = scandir($path);
 
         foreach ($items as $file) {
-            if ($file == "." || $file == ".." || $file == "index.php") {
+            if ($file == "." || $file == ".." || $file == "index.php" || $file == "search.php") {
                 continue;
             }
 
@@ -328,7 +432,7 @@ if ($path != ".") {
 echo '<table id="headerTable">';
     echo '<tr class="footer">';
         echo '<td class=""><a class=""><i>Crédits — Joffrey SCHROEDER, Jean-Jacques FOUGÈRE</i></a></td>';
-        echo '<td class=""><a class=""><i>Version 1.1</i></a></td>';
+        echo '<td class=""><a class=""><i>Version 1.2</i></a></td>';
     echo "</tr>";
 echo "</table>";
 

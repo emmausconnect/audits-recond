@@ -1,4 +1,4 @@
-find . -type f -name '*.zip' -exec sh -c '                                             root@CT135-Sites
+find . -type f -name '*.zip' -exec sh -c '
   for file; do
     parent_dir=$(dirname "$file")
     parent_mtime=$(stat -c %y "$parent_dir")

@@ -1,11 +1,15 @@
 <?php
 
-ini_set("display_errors", 0);
-ini_set("display_startup_errors", 0);
+require 'helpers.php';
 
-error_reporting(E_ALL);
-error_reporting(-1);
-ini_set("error_reporting", E_ALL);
+if (config('debug')) {
+    ini_set("display_errors", 0);
+    ini_set("display_startup_errors", 0);
+
+    error_reporting(E_ALL);
+    error_reporting(-1);
+    ini_set("error_reporting", E_ALL);
+}
 
 // Liste des régions associées aux préfixes ECID
 $regions = [
@@ -31,7 +35,7 @@ $prefix = substr($ecid, 0, 2);
 
 // Déterminer la région en fonction du préfixe
 $region = isset($regions[$prefix]) ? $regions[$prefix] : "Région inconnue";
-$region_dir = "/sites/emcotech/audits/" . $region;
+$region_dir = config('project_root_path') . "/" . $region;
 
 function deleteDir($path)
 {
@@ -89,12 +93,3 @@ if (
     header("HTTP/1.1 400 Bad Request");
     echo "Erreur lors du téléchargement du fichier.";
 }
-
-// echo $_FILES["actual_file"]["name"];
-
-// $region_dir = "/sites/emcotech/audits/" . $_POST["region"];
-// $final_file_path = $region_dir . "/" . $_FILES["actual_file"]["name"];
-
-// file_put_contents("error.txt", serialize([$_POST, $_FILES, $final_file_path]));
-
-// move_uploaded_file($_FILES["actual_file"]["tmp_name"], $final_file_path);

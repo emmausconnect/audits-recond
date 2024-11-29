@@ -3,3 +3,7 @@
 
 # Don't ignore index.php inside any top-level directory
 !*/index.php
+
+# Don't upload sensitive informations to git.
+# Rename config.example.php to config.php yourself.
+config.php
