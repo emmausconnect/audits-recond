@@ -1,3 +1,18 @@
+<?php
+$config_file = '';
+$isSubdir = false;
+if (file_exists('../config.php')) {
+    $config_file = '../config.php';
+    $isSubdir = true;
+} elseif (file_exists('config.php')) {
+    $config_file = 'config.php';
+}
+// Load config if found
+if ($config_file) {
+    require_once $config_file;
+}
+?>
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -74,8 +89,21 @@
         .table-row-link:hover .type-cell {
             font-weight: bold; /* Mettre en gras les liens, la date et le type au survol */
         }
+        .folder-link {
+            text-decoration: none;
+            color: inherit;
+        }
+        .folder-link:hover {
+            background-color: #e5e5e5; /* Légèrement éclairci au survol */
+        }
+        .folder-link:hover,
+        .folder-link:hover .file-link,
+        .folder-link:hover .date-cell,
+        .folder-link:hover .type-cell {
+            font-weight: bold; /* Mettre en gras les liens, la date et le type au survol */
+        }
         .type-cell {
-            width: 120px; /* Largeur fixe pour la colonne Type */
+            width: 130px; /* Largeur fixe pour la colonne Type */
         }
         .dl-cell {
             width: 25px; /* Largeur fixe pour la colonne Nom */
@@ -87,6 +115,13 @@
             body {
                 margin: 0;
                 max-width: unset;
+            }
+        }
+        @media (max-width: 1300px) {
+            #fileTable,
+            #searchResults,
+            #searchBox {
+                width: 100% !important;
             }
         }
     </style>
@@ -102,7 +137,7 @@ $auditCount = count($files);
 
 
 $path = isset($_GET["path"]) ? $_GET["path"] : ".";
-if ($path == "") {
+if ($path == "" || $path == ".git") {
     $path = ".";
 }
 
@@ -113,61 +148,49 @@ if (strpos(realpath($path), __DIR__) !== 0) {
 ?>
 
 <?php
-function searchFiles($directory, $searchTerm) {
-    $results = [];
-    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory));
-
-    foreach ($iterator as $file) {
-        if ($file->isFile() && $file->getFilename() != '.' && $file->getFilename() != '..' && $file->getFilename() != 'index.php' && $file->getFilename() != 'search.php') {
-            $filePath = $file->getPathname();
-            $content = @file_get_contents($filePath);
-
-            if ($content !== false && (stripos($file->getFilename(), $searchTerm) !== false || stripos($content, $searchTerm) !== false)) {
-                $relativePath = str_replace(__DIR__ . '/', '', $filePath);
-                $results[] = [
-                    'path' => $relativePath,
-                    'name' => $file->getFilename(),
-                    'type' => getFileType($file->getFilename(), false),
-                    'timestamp' => $file->getMTime()
-                ];
-            }
-        }
-    }
-    return $results;
+if ($isSubdir) {
+?>
+    <h1 id="header">
+        <a class="icon" href=".." title="Revenir au dossier parent">🔙</a>
+        <?= $parentFolder ?> - AUDITS DE LA RÉGION <span class="audit-count">(<?= $auditCount ?> audits)</span>
+    </h1>
+<?php
+}
+else {
+?>
+    <h1 id="header">
+        AUDITS DES RÉGIONS
+    </h1>
+<?php
 }
 ?>
 
-<h1 id="header">
-
-    <a class="icon" href=".." title="Revenir au dossier parent">🔙</a>
-
-    <?= $parentFolder ?> - AUDITS DE LA RÉGION <span class="audit-count">(<?= $auditCount ?> audits)</span>
-</h1>
-
 <?php
-if ($path != ".") {
+
+if ($isSubdir) {
     echo '<table id="headerTable">';
-        echo '<tr class="table-row-link">';
-            echo '<td class="file-cell"><a class="table-row-link" title="Revenir au dossier parent" href="?path=' . urlencode(dirname($path)) . '">🔙 Revenir au dossier parent</a></td>';
-        echo "</tr>";
+        if ($path != '.') {
+            echo '<tr class="table-row-link">';
+                echo '<td class="file-cell"><a class="table-row-link" title="Revenir au dossier parent" href="?path=' . urlencode(dirname($path)) . '">🔙 Revenir au dossier parent</a></td>';
+            echo "</tr>";
+        }
         echo '<tr class="table-row-link">';
             echo '<td class="file-cell"><a class="table-row-link" title="Télécharger le dossier" href="/zip.php?path=./'.$parentFolder.'/'.urlencode($path).'" download>⬇️ Télécharger ce dossier en .zip</a></td>';
         echo "</tr>";
     echo "</table>";
     echo "<br/>";
-} else {
-    echo '<table id="headerTable">';
-        echo '<tr class="table-row-link">';
-            echo '<td class="file-cell"><a class="table-row-link" title="Télécharger tous les audits en .zip" href="/zip.php?path=./'.$parentFolder.'/'.urlencode($path).'" download>⬇️ Télécharger ce dossier en .zip</a></td>';
-        echo "</tr>";
-    echo "</table>";
-    echo "<br/>";
 }
 ?>
 
-<div style="margin-bottom: 20px;">
-    <input type="text" id="searchBox" placeholder="Rechercher dans les fichiers..." style="width: calc(100% - 20px); padding: 8px; font-family: 'Courier New', Courier, monospace;">
-</div>
+<?php
+if ($isSubdir) {
+?>
+    <div style="margin-bottom: 20px;">
+        <input type="text" id="searchBox" placeholder="Rechercher dans les fichiers..." style="width: calc(100% - 20px); padding: 8px; font-family: 'Courier New', Courier, monospace;">
+    </div>
+<?php
+}
+?>
 
 <div id="searchResults" style="display: none;">
     <h2>Résultats de recherche</h2>
@@ -187,6 +210,7 @@ if ($path != ".") {
 
 <script>
 let searchTimeout;
+let parentFolder = '<?php echo $parentFolder; ?>';
 document.getElementById('searchBox').addEventListener('input', function(e) {
     clearTimeout(searchTimeout);
     const searchTerm = e.target.value.trim();
@@ -207,14 +231,24 @@ document.getElementById('searchBox').addEventListener('input', function(e) {
 
                         results.forEach(file => {
                             const row = document.createElement('tr');
-                            row.className = 'table-row-link';
-                            row.innerHTML = `
-                                <td class='dl-cell'><a class='download-link' title='Télécharger' href="${file.path}" download>⬇️</a></td>
-                                <td class='file-cell'>📄 <a class='file-link' href="${file.path}" target="_blank">${file.name}</a></td>
-                                <td class='type-cell'>${file.type}</td>
-                                <td class='date-cell'>${formatDate(file.timestamp)}</td>
-                                <td style='display: none;' data-timestamp="${file.timestamp}">${file.timestamp}</td>
-                            `;
+
+                            if (file.isDir) {
+                                row.innerHTML = `
+                                    <td class='dl-cell'><a class='download-link' title='Télécharger le dossier' href="/zip.php?path=./${parentFolder}/${file.path}" download>⬇️</a></td>
+                                    <td class='file-cell'><span class='icon'>📁</span><a class='folder-link file-or-folder-link' href="?path=${encodeURIComponent(file.path)}">${file.name}</a></td>
+                                    <td class='type-cell'>${file.type}</td>
+                                    <td class='date-cell'>${formatDate(file.timestamp)}</td>
+                                    <td style='display: none;' data-timestamp="${file.timestamp}">${file.timestamp}</td>
+                                `;
+                            } else {
+                                row.innerHTML = `
+                                    <td class='dl-cell'><a class='download-link' title='Télécharger' href="${file.path}" download>⬇️</a></td>
+                                    <td class='file-cell'><span class='icon'>📄</span><a class='file-link file-or-folder-link' href="${file.path}" target="_blank">${file.name}</a></td>
+                                    <td class='type-cell'>${file.type}</td>
+                                    <td class='date-cell'>${formatDate(file.timestamp)}</td>
+                                    <td style='display: none;' data-timestamp="${file.timestamp}">${file.timestamp}</td>
+                                `;
+                            }
                             searchResultsTable.appendChild(row);
                         });
                     } else {
@@ -246,11 +280,17 @@ function formatDate(timestamp) {
 <table id="fileTable">
     <thead>
         <tr>
-            <th></th>
-            <th onclick="sortTable(1)">Nom <span id="nameSortIndicator" class="sort-indicator">↕️</span></th>
-            <th onclick="sortTable(2)">Type<span id="typeSortIndicator" class="sort-indicator">↕️</span></th>
-            <th onclick="sortTable(3)">Date <span id="dateSortIndicator" class="sort-indicator">⬇️ Descendant</span></th>
-            <th style="display: none;">Timestamp</th> <!-- Colonne cachée pour le vrai timestamp Unix -->
+            <?php
+            if ($isSubdir) {
+            ?>
+                <th></th>
+                <th onclick="sortTable(1)">Nom <span id="nameSortIndicator" class="sort-indicator">↕️</span></th>
+                <th onclick="sortTable(2)">Type<span id="typeSortIndicator" class="sort-indicator">↕️</span></th>
+                <th onclick="sortTable(3)">Date <span id="dateSortIndicator" class="sort-indicator">⬇️ Descendant</span></th>
+                <th style="display: none;">Timestamp</th> <!-- Colonne cachée pour le vrai timestamp Unix -->
+            <?php
+            }
+            ?>
         </tr>
     </thead>
     <tbody>
@@ -263,7 +303,8 @@ function formatDate(timestamp) {
         $items = scandir($path);
 
         foreach ($items as $file) {
-            if ($file == "." || $file == ".." || $file == "index.php" || $file == "search.php") {
+
+            if ($file == "." || $file == ".." || str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, '.gitignore') || $file == ".git") {
                 continue;
             }
 
@@ -280,37 +321,54 @@ function formatDate(timestamp) {
             echo "<tr class='table-row-link'>";
 
             if ($is_dir) {
-                echo "<td class='dl-cell'><a class='download-link' title='Télécharger le dossier' href=\"/zip.php?path=./$parentFolder/$item_path\" download>⬇️</a></td>";
-                echo '<td><a class="table-row-link" href="?path=' . urlencode($item_path) . '"><span class="icon">' . $icon . "</span>" . htmlspecialchars($file) . "</a></td>";
+                if ($isSubdir) {
+                    echo "<td class='dl-cell'><a class='download-link' title='Télécharger le dossier' href=\"/zip.php?path=./$parentFolder/$item_path\" download>⬇️</a></td>";
+                    echo '<td><span class="icon">' . $icon . '</span><a class="folder-link file-or-folder-link" href="?path=' . urlencode($item_path) . '">' . htmlspecialchars($file) . "</a></td>";
+                }
+                else {
+                    echo '<td><span class="icon">' . $icon . '</span><a class="folder-link file-or-folder-link" href="./' . htmlspecialchars($file) . '">' . htmlspecialchars($file) . "</a></td>";
+                }
             } else {
                 echo "<td class='dl-cell'><a class='download-link' title='Télécharger' href=\"$item_path\" download>⬇️</a></td>";
-                echo "<td class='file-cell'>$icon <a class='file-link' href=\"$item_path\" target=\"_blank\">$fileName</a></td>";
+                echo "<td class='file-cell'><span class=\"icon\">" . $icon . "</span><a class='file-link file-or-folder-link' href=\"$item_path\" target=\"_blank\">$fileName</a></td>";
             }
 
-            echo "<td class='type-cell'>$type</td>";
-            echo "<td class='date-cell'>" .
-                formatFrenchDate($timestamp) .
-                "</td>";
-            echo "<td style='display: none;' data-timestamp=\"$timestamp\">" .
-                intval($timestamp) .
-                "</td>";
+            if ($isSubdir) {
+                echo "<td class='type-cell'>$type</td>";
+                echo "<td class='date-cell'>" . formatFrenchDate($timestamp) . "</td>";
+                echo "<td style='display: none;' data-timestamp=\"$timestamp\">" . intval($timestamp) ."</td>";
+            }
             echo "</tr>";
+
         }
 
         function getFileType($fileName, $is_dir)
         {
+            if (str_starts_with($fileName, 'QrCode')) {
+                return "▬ QR Code";
+            }
+            else if (str_ends_with($fileName, 'bolc2.csv')) {
+                return "📃 CSV BOLC";
+            }
+
             $suffix = substr($fileName, 2, 2);
             switch ($suffix) {
                 case "SM":
-                    return "Smartphone";
+                    return "📱 Smartphone";
                 case "PC":
-                    return "PC";
+                    return "🖥️ PC";
                 case "TA":
-                    return "Tablette";
+                    return "⬜️ Tablette";
                 case "TE":
-                    return "Téléphone";
+                    return "📞 Téléphone";
+                case "PA":
+                    return "🤝🏻 UHPA";
+                case "-P":
+                    return "📃 CSV BOLC";
+                case "-T":
+                    return "📃 CSV BOLC";
                 case $is_dir:
-                    return "Dossier";
+                    return "📁 Dossier";
                 default:
                     return "Autre";
             }
@@ -362,8 +420,8 @@ function formatDate(timestamp) {
             let x, y;
 
             if (columnIndex === 1) { // Tri par colonne "Nom"
-                x = a.cells[1].querySelector('.file-link').textContent.trim();
-                y = b.cells[1].querySelector('.file-link').textContent.trim();
+                x = a.cells[1].querySelector('.file-or-folder-link').textContent.trim();
+                y = b.cells[1].querySelector('.file-or-folder-link').textContent.trim();
             } else if (columnIndex === 2) { // Tri par colonne "Type"
                 x = a.cells[2].textContent.trim();
                 y = b.cells[2].textContent.trim();
@@ -417,12 +475,18 @@ function formatDate(timestamp) {
         }
     }
 
+    <?php
+    if ($isSubdir) {
+    ?>
     // Initialize the table sorting on page load
     document.addEventListener('DOMContentLoaded', function() {
         sortTable(3); // Initial sort by date descending
         sortTable(3); // Initial sort by date descending
         // updateSortIndicators(3, 'desc'); // Update indicators for descending order
     });
+    <?php
+    }
+    ?>
 </script>
 
 </body>
@@ -432,7 +496,7 @@ function formatDate(timestamp) {
 echo '<table id="headerTable">';
     echo '<tr class="footer">';
         echo '<td class=""><a class=""><i>Crédits — Joffrey SCHROEDER, Jean-Jacques FOUGÈRE</i></a></td>';
-        echo '<td class=""><a class=""><i>Version 1.2</i></a></td>';
+        echo '<td class=""><a class=""><i>Version 1.2.3</i></a></td>';
     echo "</tr>";
 echo "</table>";
 

@@ -34,7 +34,7 @@ $ecid = isset($_POST["ecid"]) ? $_POST["ecid"] : "";
 $prefix = substr($ecid, 0, 2);
 
 // Déterminer la région en fonction du préfixe
-$region = isset($regions[$prefix]) ? $regions[$prefix] : "Région inconnue";
+$region = isset($regions[$prefix]) ? $regions[$prefix] : "_Région inconnue";
 $region_dir = config('project_root_path') . "/" . $region;
 
 function deleteDir($path)
