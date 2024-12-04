@@ -496,7 +496,7 @@ function formatDate(timestamp) {
 echo '<table id="headerTable">';
     echo '<tr class="footer">';
         echo '<td class=""><a class=""><i>Crédits — Joffrey SCHROEDER, Jean-Jacques FOUGÈRE</i></a></td>';
-        echo '<td class=""><a class=""><i>Version 1.2.3</i></a></td>';
+        echo '<td class=""><a href="https://github.com/emmausconnect/audits-recond" target="_blank"><i>Version 1.2.3</i></a></td>';
     echo "</tr>";
 echo "</table>";
 
