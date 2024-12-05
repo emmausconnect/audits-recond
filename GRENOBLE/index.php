@@ -131,7 +131,7 @@ if ($config_file) {
 <?php
 $parentFolder = basename(__DIR__); // Nom du dossier parent
 $files = array_filter(glob("*"), function ($file) {
-    return $file !== "index.html" && $file !== "." && $file !== "..";
+    return $file !== "index.html" && $file !== "index.php" && $file !== "search.php" && $file !== "." && $file !== "..";
 });
 $auditCount = count($files);
 
