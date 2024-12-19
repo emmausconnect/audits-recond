@@ -1,6 +1,10 @@
-# Ignore everything inside top-level directories
-*/*
+# Allow .gitkeep files in subdirectories
+!*/
+!*/.gitkeep
 
-# Don't upload sensitive informations to git.
-# Rename config.example.php to config.php yourself.
+# Ignore all other files in subdirectories
+*/*
+!*/.gitkeep
+
+# Still specifically ignore config.php anywhere
 config.php
