@@ -1,8 +1,4 @@
 <?php
-if (!defined('ALLOW_ACCESS')) {
-    header('Location: /');
-    exit;
-}
 
 class Config {
     private static $instance = null;

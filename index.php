@@ -506,10 +506,24 @@ $region = $parentFolder;
             <a class='login-link' href="../?page=login&region=<?php echo $region; ?>">Se connecter</a>
             <?php
         } else {
-            if ($region !== $_SESSION['user']['region']) {
+            if ($_SESSION['user']['acl'] <= 9) {
+                if ($region !== $_SESSION['user']['region']) {
                 ?> 
-                <a href="../?page=login&region=<?php echo $region; ?>">Se connecter</a>
+                    <a href="../?page=login&region=<?php echo $region; ?>">Se connecter</a>
                 <?php
+                } else {
+                    if (config('debug')) {
+                        var_dump($_SESSION['user']);
+                    }
+    
+                    $isLogged = true;
+                    $username = $_SESSION['user']['username'];
+                    $email    = $_SESSION['user']['email'];
+                    $acl      = $_SESSION['user']['acl'];
+                    $prefix   = $_SESSION['user']['prefix'];
+    
+                    echo 'Connecté en tant que <strong>' . $_SESSION['user']['username'] . '</strong>. <a class="login-link" href="/logout.php?region=' . $region . '">Se déconnecter</a>.';
+                }
             } else {
 
                 if (config('debug')) {
@@ -518,7 +532,7 @@ $region = $parentFolder;
 
                 $isLogged = true;
                 $username = $_SESSION['user']['username'];
-                $email    = $_SESSION['user']['username'];
+                $email    = $_SESSION['user']['email'];
                 $acl      = $_SESSION['user']['acl'];
                 $prefix   = $_SESSION['user']['prefix'];
 
@@ -1305,7 +1319,7 @@ $region = $parentFolder;
 
                 // Envoi avec gestion du timeout
                 const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+                const timeout = setTimeout(() => controller.abort(), 10000); // 30s timeout
 
                 const response = await fetch('/upload.php', {
                     method: 'POST',
