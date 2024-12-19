@@ -19,7 +19,7 @@ function searchFiles($directory, $searchTerm) {
 
     foreach ($iterator as $file) {
         $filename = $file->getFilename();
-        if ($filename === '.' || $filename === '..' || $filename === 'index.php' || $filename == "CORBEILLE" || $filename === 'search.php') {
+        if ($filename === '.' || $filename === '..' || $filename === 'index.php' || $filename == '.gitkeep' || $filename == "CORBEILLE" || $filename === 'search.php') {
             continue;
         }
 

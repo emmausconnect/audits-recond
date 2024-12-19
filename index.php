@@ -44,7 +44,7 @@ $region = $parentFolder;
     <meta charset="UTF-8">
     <title>Liste des fichiers HTML</title>
     <style>
-        @import url('https://fonts.cdnfonts.com/css/jetbrains-mono-2');
+        @import url('//fonts.cdnfonts.com/css/jetbrains-mono-2');
 
         :root {
             --font-family: "JetBrains Mono", monospace;
@@ -522,10 +522,9 @@ $region = $parentFolder;
 
     <?php
     $files = array_filter(glob("*"), function ($file) {
-        return $file !== "index.html" && $file !== "index.php" && $file !== "search.php" && $file !== "CORBEILLE" && $file !== "." && $file !== "..";
+        return $file !== "index.html" && $file !== "index.php" && $file !== '.gitkeep' && $file !== "search.php" && $file !== "CORBEILLE" && $file !== "." && $file !== "..";
     });
     $auditCount = count($files);
-
 
     if (strpos(realpath($path), __DIR__) !== 0) {
         // The path is "above" __DIR__, handle accordingly
@@ -764,7 +763,7 @@ $region = $parentFolder;
 
             foreach ($items as $file) {
 
-                if ($file == "." || $file == ".."  || $file == "CORBEILLE" || str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, '.gitignore') || $file == ".git") {
+                if ($file == "." || $file == ".."  || $file == "CORBEILLE"  || $file == ".gitkeep" || str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, '.gitignore') || $file == ".git") {
                     continue;
                 }
 
@@ -1444,8 +1443,8 @@ $region = $parentFolder;
 
 echo '<table id="headerTable">';
 echo '<tr class="footer">';
-echo '<td class=""><a class=""><i>Crédits — Joffrey SCHROEDER, Jean-Jacques FOUGÈRE</i></a></td>';
-echo '<td class=""><a href="https://github.com/emmausconnect/audits-recond" target="_blank"><i>Version ' . config('version') . '</i></a></td>';
+echo '<td class=""><i>Crédits — <a href="//schroed.fr" target="blank_">Joffrey SCHROEDER</a>, Jean-Jacques FOUGÈRE</i></td>';
+echo '<td class=""><a href="//github.com/emmausconnect/audits-recond" target="_blank"><i>Version ' . config('version') . '</i></a></td>';
 echo "</tr>";
 echo "</table>";
 
