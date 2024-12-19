@@ -6,26 +6,28 @@ require 'helpers.php';
 function zipFolder($folderPath, $zipFilePath) {
     $zip = new ZipArchive();
     if ($zip->open($zipFilePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) === TRUE) {
-        $folderPath = realpath($folderPath);  // Get the absolute path of the folder
-
+        $folderPath = realpath($folderPath);
         $files = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($folderPath),
             RecursiveIteratorIterator::LEAVES_ONLY
         );
-
+        
+        $hasFiles = false;
         foreach ($files as $name => $file) {
             if (!$file->isDir()) {
                 $filePath = $file->getRealPath();
                 $relativePath = substr($filePath, strlen($folderPath) + 1);
                 $zip->addFile($filePath, $relativePath);
+                $hasFiles = true;
             }
         }
-
+        
         $zip->close();
-        return true;
-    } else {
-        return false;
+        
+        // Return false if no files were added
+        return $hasFiles;
     }
+    return false;
 }
 
 // Function to sanitize the folder path and prevent directory traversal
@@ -48,7 +50,7 @@ if (isset($_GET['path'])) {
     $realFolderPath = sanitizePath($folderPath);
 
     // Define the base directory you want to allow
-    $baseDir =  config('project_root_path');  // Allowed base directory (default is __DIR__, loaded from where config.php is)
+    $baseDir =  config('project_root_path');
 
     if (config('debug')) {
         var_dump($baseDir);
@@ -62,15 +64,35 @@ if (isset($_GET['path'])) {
             $folderName = basename($realFolderPath);
             $zipFilePath = tempnam(sys_get_temp_dir(), 'zip');
 
+            // error_log($zipFilePath);
             if (zipFolder($realFolderPath, $zipFilePath)) {
+                if (!file_exists($zipFilePath)) {
+                    error_log("Zip file was not created at: " . $zipFilePath);
+                    echo "<pre>Error: Failed to create zip file.</pre>";
+                    return;
+                }
+                
                 header('Content-Type: application/zip');
                 header('Content-Disposition: attachment; filename="' . $folderName . '.zip"');
-                header('Content-Length: ' . filesize($zipFilePath));
+                
+                if (!is_readable($zipFilePath)) {
+                    error_log("Zip file is not readable: " . $zipFilePath);
+                    echo "<pre>Error: Cannot read zip file.</pre>";
+                    return;
+                }
+                
+                $fileSize = filesize($zipFilePath);
+                if ($fileSize === false) {
+                    error_log("Cannot get file size for: " . $zipFilePath);
+                    echo "<pre>Error: Cannot determine file size.</pre>";
+                    return;
+                }
+                
+                header('Content-Length: ' . $fileSize);
                 readfile($zipFilePath);
-
-                unlink($zipFilePath); // Delete the temporary file
+                unlink($zipFilePath);
             } else {
-                echo "<pre>Error: Unable to create zip file.</pre>";
+                echo "<pre>Error: Directory is empty or no files could be added to the zip.</pre>";
             }
         } else {
             echo "<pre>Error: The provided path is not a directory.</pre>";

@@ -12,20 +12,7 @@ if (config('debug')) {
 }
 
 // Liste des régions associées aux préfixes ECID
-$regions = [
-    "ST" => "STRASBOURG",
-    "SD" => "SAINT-DENIS",
-    "MB" => "MAISON BLANCHE",
-    "CR" => "CRÉTEIL",
-    "MA" => "MARSEILLE",
-    "GR" => "GRENOBLE",
-    "LV" => "LA VILLETTE",
-    "LY" => "LYON",
-    "BX" => "BORDEAUX",
-    "LI" => "LILLE",
-    "VI" => "VICTOIRES",
-    "TE" => "TEST",
-];
+$regions = config('regions');
 
 // Récupérer la valeur de ecid dans $_POST
 $ecid = isset($_POST["ecid"]) ? $_POST["ecid"] : "";
