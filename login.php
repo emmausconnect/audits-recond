@@ -1,15 +1,11 @@
 <?php
-session_set_cookie_params([
-    'lifetime' => 3600,
-    'path' => '/',
-    'domain' => '',
-    'secure' => true,
-    'httponly' => true,
-]);
-session_start();
+if (!defined('ALLOW_ACCESS')) {
+    header('Location: /');
+    exit;
+}
 
-// Load configuration
-$config = require 'config.php';
+// Deprecated
+$config = Config::getInstance()->all();
 
 // Get the region from the URL (default is empty)
 $regionFromGet = $_GET['region'] ?? '';
@@ -42,7 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'prefix' => $user['prefix'],
                     'acl' => $user['acl']
                 ];
-                header('Location: /' . $region);
+                // header('Location: /' . $region);
+                echo '<meta http-equiv="refresh" content="0;url=/'. $region .'">';
                 exit;
             }
         }
@@ -50,14 +47,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $error = 'Identifiant ou mot de passe incorrect pour cette région.';
 }
 ?>
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
-</head>
-<body>
     <p><a href='/'>Revenir à l'accueil</a></p>
     <h1>Authentification</h1>
     <?php if (!empty($error)): ?>
@@ -84,5 +73,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <br><br>
         <button type="submit">Se connecter</button>
     </form>
-</body>
-</html>

@@ -8,6 +8,8 @@ session_set_cookie_params([
 ]);
 session_start();
 
+define('ALLOW_ACCESS', true);
+
 $path = isset($_GET["path"]) ? $_GET["path"] : ".";
 if ($path == "" || $path == ".git") {
     $path = ".";
@@ -39,7 +41,6 @@ $region = $parentFolder;
 
 <!DOCTYPE html>
 <html lang="fr">
-
 <head>
     <meta charset="UTF-8">
     <title>Liste des fichiers HTML</title>
@@ -484,21 +485,30 @@ $region = $parentFolder;
         }
     </style>
 </head>
-
 <body>
-
+    <?php
+    if (isset($_GET['page']) && $_GET['page'] === 'login' && !$isSubdir) {
+        if (empty($_SESSION['user'])) {
+            include('login.php');
+        }
+        else {
+            echo '<meta http-equiv="refresh" content="0;url=/'. $_SESSION['user']['region'] .'">';
+        }
+        exit();
+    }
+    ?>
     <?php
     if ($isSubdir) {
         echo '<span class="auth-infos">';
 
         if (empty($_SESSION['user'])) {
             ?>
-            <a class='login-link' href="../login.php?region=<?php echo $region; ?>">Se connecter</a>
+            <a class='login-link' href="../?page=login&region=<?php echo $region; ?>">Se connecter</a>
             <?php
         } else {
             if ($region !== $_SESSION['user']['region']) {
                 ?> 
-                <a href="../login.php?region=<?php echo $region; ?>">Se connecter</a>
+                <a href="../?page=login&region=<?php echo $region; ?>">Se connecter</a>
                 <?php
             } else {
 
