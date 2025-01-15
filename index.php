@@ -37,7 +37,6 @@ if ($helpers_file) {
 $parentFolder = basename(__DIR__);
 $region = $parentFolder;
 
-include("notfound.php");
 ?>
 
 <!DOCTYPE html>
