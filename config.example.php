@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.3.1',
+    'version' => '1.3.2',
     'debug' => false,
     'hostname' => php_sapi_name() === 'cli' ? 'localhost' : $_SERVER['HTTP_HOST'],
     'project_root_path' => __DIR__,
