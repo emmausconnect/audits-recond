@@ -1,13 +1,21 @@
 <?php
 
 return [
+    'version' => '1.3.1',
     'debug' => false,
-    'hostname' => $_SERVER['HTTP_HOST'],
+    'hostname' => php_sapi_name() === 'cli' ? 'localhost' : $_SERVER['HTTP_HOST'],
     'project_root_path' => __DIR__,
-    'db_host' => 'localhost',
-    'db_user' => 'root',
-    'db_password' => 'password',
-    'app_name' => 'MonApplication',
+    'db_host' => 'localhost', // Non utilisé
+    'db_user' => 'root', // Non utilisé
+    'db_password' => 'password', // Non utilisé
+    'app_name' => 'MonApplication', // Non utilisé
+    'smtp_host' => 'smtp.gmail.com',
+    'smtp_auth' => true,
+    'smtp_username' => '', // Votre email gmail
+    'smtp_password' => '', // Votre MDP Unique Généré ici :  https://myaccount.google.com/apppasswords
+    'smtp_mail_from' => '', // Votre email gmail
+    'smtp_send_to' => 'php-emcotech@drop.tf', // A quel email envoyer l'erreur
+    'smtp_port' => 587,
     'auth' => [
         'CRÉTEIL' => [
             [ 'username' => 'user1', 'email' => '', 'pass' => 'password1', 'acl' => 1, 'prefix' => 'CR'],

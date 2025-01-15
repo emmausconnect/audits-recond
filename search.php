@@ -1,11 +1,9 @@
 <?php
 header('Content-Type: application/json');
-
 if (!isset($_GET['term']) || strlen($_GET['term']) < 2) {
     echo json_encode([]);
     exit;
 }
-
 $searchTerm = $_GET['term'];
 $baseDir = __DIR__;
 
@@ -19,12 +17,18 @@ function searchFiles($directory, $searchTerm) {
 
     foreach ($iterator as $file) {
         $filename = $file->getFilename();
-        if ($filename === '.' || $filename === '..' || $filename === 'index.php' || $filename == '.gitkeep' || $filename == "CORBEILLE" || $filename === 'search.php') {
+        if ($filename === '.' || $filename === '..' || $filename === 'index.php' ||
+            $filename === '.gitkeep' || $filename === 'search.php') {
             continue;
         }
 
         $filePath = $file->getPathname();
         $relativePath = str_replace($directory . '/', '', $filePath);
+
+        // Skip if the path contains 'CORBEILLE' anywhere
+        if (stripos($relativePath, 'CORBEILLE') !== false) {
+            continue;
+        }
 
         // Handle folders
         if ($file->isDir()) {
@@ -47,7 +51,6 @@ function searchFiles($directory, $searchTerm) {
         // Handle files
         $content = @file_get_contents($filePath);
         $parentDir = dirname($relativePath);
-
         if ($content !== false && (stripos($filename, $searchTerm) !== false || stripos($content, $searchTerm) !== false)) {
             // Add parent folder if it hasn't been added yet
             if ($parentDir !== '.' && !isset($foundFolders[$parentDir])) {
@@ -61,7 +64,6 @@ function searchFiles($directory, $searchTerm) {
                 ];
                 $foundFolders[$parentDir] = true;
             }
-
             // Add the file
             $results[] = [
                 'path' => $relativePath,
@@ -92,7 +94,6 @@ function getFileType($fileName, $is_dir) {
     else if (str_ends_with($fileName, 'bolc2.csv')) {
         return "📃 CSV BOLC";
     }
-
     $suffix = substr($fileName, 2, 2);
     switch ($suffix) {
         case "SM":

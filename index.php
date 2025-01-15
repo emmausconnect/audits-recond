@@ -126,9 +126,18 @@ $region = $parentFolder;
             font-weight: normal;
         }
 
-        .clickable:hover {
+        .clickable {
             text-decoration: underline;
+        }
+
+        .clickable:hover {
             text-decoration-thickness: var(--border-thickness);
+            font-weight: var(--font-weight-bold);
+        }
+
+        .format-file-subtitle {
+            font-weight: var(--font-weight-medium);
+            font-size: 13px;
         }
 
         html {
@@ -227,7 +236,7 @@ $region = $parentFolder;
 
         #fileTable,
         #searchResults {
-            margin-bottom: 4vh;
+            margin-bottom: 20px;
         }
 
         body {
@@ -451,7 +460,6 @@ $region = $parentFolder;
             flex-direction: column;
             gap: 10px;
         }
-
         .notification {
             padding: 12px 24px;
             border-radius: 4px;
@@ -508,20 +516,20 @@ $region = $parentFolder;
         } else {
             if ($_SESSION['user']['acl'] <= 9) {
                 if ($region !== $_SESSION['user']['region']) {
-                ?> 
+                ?>
                     <a href="../?page=login&region=<?php echo $region; ?>">Se connecter</a>
                 <?php
                 } else {
                     if (config('debug')) {
                         var_dump($_SESSION['user']);
                     }
-    
+
                     $isLogged = true;
                     $username = $_SESSION['user']['username'];
                     $email    = $_SESSION['user']['email'];
                     $acl      = $_SESSION['user']['acl'];
                     $prefix   = $_SESSION['user']['prefix'];
-    
+
                     echo 'Connecté en tant que <strong>' . $_SESSION['user']['username'] . '</strong>. <a class="login-link" href="/logout.php?region=' . $region . '">Se déconnecter</a>.';
                 }
             } else {
@@ -546,7 +554,16 @@ $region = $parentFolder;
 
     <?php
     $files = array_filter(glob("*"), function ($file) {
-        return $file !== "index.html" && $file !== "index.php" && $file !== '.gitkeep' && $file !== "search.php" && $file !== "CORBEILLE" && $file !== "." && $file !== "..";
+        return $file !== "index.html"
+        && $file !== "index.php"
+        && $file !== '.gitkeep'
+        && $file !== "search.php"
+        && $file !== "CORBEILLE"
+        && $file !== "vendor"
+        && $file !== "composer.lock"
+        && $file !== "composer.json"
+        && $file !== "."
+        && $file !== "..";
     });
     $auditCount = count($files);
 
@@ -584,11 +601,12 @@ $region = $parentFolder;
                 <span class="clickable" id="select-files">fichiers</span> ou des
                 <span class="clickable" id="select-folder">dossiers</span>
                 <br />
-                <span class="format-file-span">Format fichier</span>
-                <span> : <?php echo $prefix; ?>XX24-0000.html</span>
-                <br />
-                <span class="format-file-span">Format dossier</span>
-                <span> : <?php echo $prefix; ?>XX24-0000</span>
+                <span class="format-file-subtitle">
+                    <span class="format-file-span">Format fichier</span>
+                    <span> : <?php echo $prefix; ?>XX24-0000.html</span> •
+                    <span class="format-file-span">Format dossier</span>
+                    <span> : <?php echo $prefix; ?>XX24-0000</span>
+                </span>
             </span>
 
             <!-- Input caché pour les fichiers -->
@@ -618,9 +636,9 @@ $region = $parentFolder;
         if (!is_dir($trashDir)) {
             mkdir($trashDir, 0777, true);
         }
-        
+
         $trashCount = count(scandir($trashDir)) - 2;
-        
+
         echo '<table id="headerTable">';
         echo '<tr class="table-row-link">';
         echo '<td class="file-cell" style="border-bottom:0"><span class="icon" style="float:left">🗑️</span><a class="table-row-link" title="Voir la corbeille" href="?path=./CORBEILLE">Voir la corbeille (' . $trashCount . ')</a></td>';
@@ -787,7 +805,7 @@ $region = $parentFolder;
 
             foreach ($items as $file) {
 
-                if ($file == "." || $file == ".."  || $file == "CORBEILLE"  || $file == ".gitkeep" || str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, '.gitignore') || $file == ".git") {
+                if ($file == "." || $file == ".."  || $file == "CORBEILLE"  || $file == ".gitkeep"  || $file == "vendor" || str_starts_with($file, 'composer') ||  str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, '.gitignore') || $file == ".git") {
                     continue;
                 }
 
@@ -818,16 +836,16 @@ $region = $parentFolder;
                 if ($is_dir) {
                     if ($isSubdir) {
                         echo "<td class='dl-cell'><a class='download-link' title='Télécharger le dossier' href=\"/zip.php?path=./$parentFolder/$item_path\" download>⬇️</a></td>";
-                        echo '<td>' . 
-                            ($isLogged && !$isSubsubdir ? '<span class="delete-btn" data-path="' . urlencode($item_path) . '" data-type="dir">❌</span> ' : '') . 
+                        echo '<td>' .
+                            ($isLogged && !$isSubsubdir ? '<span class="delete-btn" data-path="' . urlencode($item_path) . '" data-type="dir">❌</span> ' : '') .
                             '<span class="icon">' . $icon . '</span> <a class="folder-link file-or-folder-link" href="?path=' . urlencode($item_path) . '">' . htmlspecialchars($file) . "</a></td>";
                     } else {
                         echo '<td><span class="icon">' . $icon . '</span><a class="folder-link file-or-folder-link" href="./' . htmlspecialchars($file) . '">' . htmlspecialchars($file) . "</a></td>";
                     }
                 } else {
                     echo "<td class='dl-cell'><a class='download-link' title='Télécharger' href=\"$item_path\" download>⬇️</a></td>";
-                    echo "<td class='file-cell'>" . 
-                        ($isLogged && !$isSubsubdir ? "<span class='delete-btn' data-path='" . urlencode($item_path) . "' data-type='file'>❌</span> " : "") . 
+                    echo "<td class='file-cell'>" .
+                        ($isLogged && !$isSubsubdir ? "<span class='delete-btn' data-path='" . urlencode($item_path) . "' data-type='file'>❌</span> " : "") .
                         "<span class=\"icon\">" . $icon . "</span> <a class='file-link file-or-folder-link' href=\"$item_path\" target=\"_blank\">$fileName</a></td>";
                 }
 
@@ -1424,7 +1442,7 @@ $region = $parentFolder;
                         row.style.opacity = '0';
                         setTimeout(() => {
                             row.remove();
-                            
+
                             // Si c'est dans les résultats de recherche et qu'il n'y a plus de résultats
                             if (isInSearchResults) {
                                 const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
@@ -1432,7 +1450,7 @@ $region = $parentFolder;
                                     searchResultsTable.innerHTML = '<tr><td colspan="4">Aucun résultat trouvé</td></tr>';
                                 }
                             }
-                            
+
                             showNotification('Élément déplacé dans la corbeille', 'success');
                         }, 300);
 
@@ -1465,10 +1483,10 @@ $region = $parentFolder;
 
 <?php
 
-echo '<table id="headerTable">';
+echo '<table id="headerTable" style="margin-bottom:15px">';
 echo '<tr class="footer">';
-echo '<td class=""><i>Crédits — <a href="//schroed.fr" target="blank_">Joffrey SCHROEDER</a>, Jean-Jacques FOUGÈRE</i></td>';
-echo '<td class=""><a href="//github.com/emmausconnect/audits-recond" target="_blank"><i>Version ' . config('version') . '</i></a></td>';
+echo '<td class="">Crédits | <i><a href="//schroed.fr" target="blank_">Joffrey SCHROEDER</a> • Jean-Jacques FOUGÈRE</i></td>';
+echo '<td class=""><a href="//github.com/emmausconnect/audits-recond" target="_blank">Version ' . config('version') . '</a></td>';
 echo "</tr>";
 echo "</table>";
 
