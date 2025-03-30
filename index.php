@@ -817,7 +817,7 @@ $region = $parentFolder;
 
             foreach ($items as $file) {
 
-                if ($file == "." || $file == ".."  || $file == "CORBEILLE"  || $file == ".gitkeep"  || $file == "vendor" || str_starts_with($file, 'composer') ||  str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, 'wallpaper.png') || str_ends_with($file, '.gitignore') || $file == ".git") {
+                if ($file == "." || $file == ".."  || $file == "CORBEILLE"  || $file == ".gitkeep"  || $file == "vendor" || str_starts_with($file, 'composer') ||  str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, 'wallpaper.png') || str_ends_with($file, 'favicon.png') || str_ends_with($file, '.gitignore') || $file == ".git") {
                     continue;
                 }
 
