@@ -43,7 +43,19 @@ $region = $parentFolder;
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Liste des fichiers HTML</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.png">
+    <?php
+    if ($isSubdir) {
+    ?>
+        <title><?= $parentFolder ?> • Audits EC</title>
+    <?php
+    }
+    else {
+    ?>
+        <title>Liste des régions • Audits EC</title>
+    <?php
+    }
+    ?>
     <style>
         @import url('//fonts.cdnfonts.com/css/jetbrains-mono-2');
 
@@ -805,7 +817,7 @@ $region = $parentFolder;
 
             foreach ($items as $file) {
 
-                if ($file == "." || $file == ".."  || $file == "CORBEILLE"  || $file == ".gitkeep"  || $file == "vendor" || str_starts_with($file, 'composer') ||  str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, '.gitignore') || $file == ".git") {
+                if ($file == "." || $file == ".."  || $file == "CORBEILLE"  || $file == ".gitkeep"  || $file == "vendor" || str_starts_with($file, 'composer') ||  str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, 'wallpaper.png') || str_ends_with($file, '.gitignore') || $file == ".git") {
                     continue;
                 }
 

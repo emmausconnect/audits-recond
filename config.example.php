@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.3.2',
+    'version' => '1.3.4',
     'debug' => false,
     'hostname' => php_sapi_name() === 'cli' ? 'localhost' : $_SERVER['HTTP_HOST'],
     'project_root_path' => __DIR__,
@@ -51,6 +51,9 @@ return [
         'MARSEILLE' => [
             [ 'username' => 'user12', 'email' => '', 'pass' => 'password12', 'acl' => 1, 'prefix' => 'MA'],
         ],
+        'ROUBAIX' => [
+            [ 'username' => 'glochet', 'email' => '', 'pass' => '', 'acl' => 5, 'prefix' => 'RO'],
+        ],
     ],
     'regions' => [
         "ST" => "STRASBOURG",
@@ -61,6 +64,7 @@ return [
         "GR" => "GRENOBLE",
         "LV" => "LA VILLETTE",
         "LY" => "LYON",
+        "RO" => "ROUBAIX",
         "BX" => "BORDEAUX",
         "LI" => "LILLE",
         "VI" => "VICTOIRES",

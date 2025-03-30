@@ -14,7 +14,7 @@ $root = config('project_root_path');
 $hostname = $_SERVER['HTTP_HOST'];
 $region_dir = $root . "/" . $_POST["region"];
 $final_file_path = $region_dir . "/";
-$error = $_FILES['actual_file']['error'];
+$error = $_FILES['files']['error'];
 
 function createDirectoryStructure($path) {
     if (!file_exists($path)) {
@@ -42,15 +42,15 @@ function handleFileUploads($final_file_path) {
     // Parcourir tous les fichiers
     foreach ($_FILES['files']['name'] as $key => $filename) {
         $from = $_FILES['files']['tmp_name'][$key];
-        
+
         // Récupérer le chemin relatif
         $relativePath = isset($_POST['paths'][$key]) ? trim($_POST['paths'][$key], '/') : '';
-        
+
         // Si le chemin est "Files", traiter comme un fichier à la racine
         if ($relativePath === 'Files') {
             $relativePath = '';
         }
-        
+
         // Construire le chemin complet
         $fullPath = $final_file_path;
         if ($relativePath) {
@@ -60,7 +60,7 @@ function handleFileUploads($final_file_path) {
                 mkdir($fullPath, 0777, true);
             }
         }
-        
+
         $to = $fullPath . '/' . $filename;
 
         // Tenter de déplacer le fichier
