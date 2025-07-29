@@ -1,0 +1,36 @@
+{
+    "control":[
+        { "VTOY_MENU_LANGUAGE": "fr_FR" },
+        { "VTOY_DEFAULT_SEARCH_ROOT": "/ISO" }
+    ],
+    "control_legacy":[
+        { "VTOY_MENU_LANGUAGE": "fr_FR" }
+    ],
+    "control_uefi":[
+        { "VTOY_MENU_LANGUAGE": "fr_FR" }
+    ],
+    "control_aa64":[
+        { "VTOY_MENU_LANGUAGE": "fr_FR" }
+    ],
+    "theme_uefi":{
+        "gfxmode": "max"
+    },
+    "auto_install":[
+        {
+            "image": "/ISO/Windows_10.iso",
+            "template":[
+                "/ventoy/scripts/win_unattended_installfromusb.xml",
+                "/ventoy/scripts/win_unattended.xml"
+            ],
+            "autosel": 1
+        },
+        {
+            "image": "/ISO/Windows_11.iso",
+            "template":[
+                "/ventoy/scripts/win_unattended_installfromusb.xml",
+				"/ventoy/scripts/win_unattended.xml"
+            ],
+            "autosel": 1
+        }
+    ]
+}
