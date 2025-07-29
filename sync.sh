@@ -5,7 +5,7 @@ source_file="index.php"
 source_search="search.php"
 
 # Array of ignored folder names
-ignored_folders=("vendor" "another_folder_to_ignore")
+ignored_folders=("vendor" "api" "storage")
 
 # Loop through all first-level directories
 for dir in */; do

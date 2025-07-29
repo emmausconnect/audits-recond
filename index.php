@@ -43,16 +43,17 @@ $region = $parentFolder;
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow">
     <link rel="icon" type="image/x-icon" href="/favicon.png">
     <?php
     if ($isSubdir) {
     ?>
-        <title><?= $parentFolder ?> • Audits EC</title>
+        <title><?= $parentFolder ?> • <?= config('app_name') ?></title>
     <?php
     }
     else {
     ?>
-        <title>Liste des régions • Audits EC</title>
+        <title>Liste des régions • <?= config('app_name') ?></title>
     <?php
     }
     ?>
@@ -63,6 +64,7 @@ $region = $parentFolder;
             --font-family: "JetBrains Mono", monospace;
             --text-color: #000;
             --text-color-alt: #666;
+            --text-color-warning: red;
             --background-color: #fff;
             --background-color-alt: #eee;
             --background-color-hover: #c6c6c6;
@@ -91,6 +93,7 @@ $region = $parentFolder;
             :root {
                 --text-color: #fff;
                 --text-color-alt: #aaa;
+                --text-color-warning: rgb(245, 129, 129);
                 --background-color: #000;
                 --background-color-alt:#212121;
                 --background-color-hover: #484848;
@@ -176,6 +179,11 @@ $region = $parentFolder;
             text-decoration: underline;
             text-decoration-thickness: var(--border-thickness);
             font-weight: var(--font-weight-bold);
+        }
+
+        .warningHost {
+            color: var(--text-color-warning);
+            margin-bottom: 4px;
         }
 
         #searchBox {
@@ -569,9 +577,12 @@ $region = $parentFolder;
         return $file !== "index.html"
         && $file !== "index.php"
         && $file !== '.gitkeep'
+        && $file !== ".htaccess"
         && $file !== "search.php"
         && $file !== "CORBEILLE"
+        && $file !== "api"
         && $file !== "vendor"
+        && $file !== "storage"
         && $file !== "composer.lock"
         && $file !== "composer.json"
         && $file !== "."
@@ -590,13 +601,26 @@ $region = $parentFolder;
         ?>
         <h1 id="header">
             <a class="icon" href=".." title="Revenir au dossier parent">🔙</a>
-            <?= $parentFolder ?> - AUDITS DE LA RÉGION <span class="audit-count">(<?= $auditCount ?> audits)</span>
+            <?= $parentFolder ?> • <?= config('app_name') ?> <span class="audit-count">(<?= $auditCount ?> audits)</span>
         </h1>
+
+        <?php
+        if (config('hostname') === 'audits.drop.tf') {
+        ?>
+            <h5 class="warningHost">Vous êtes sur le miroir audits.drop.tf. Les dépôts sont décalés d'une minute mais les recherches sont rapides grâce à un <strong>SSD</strong>. La version officielle du dépôt disponible en cliquant ici : <a href="https://audits.emmaus-connect.org/<?php echo $region; ?>">audits.emmaus-connect.org</a>.</h5>
+        <?php
+        }
+        else {
+        ?>
+            <h5 class="warningHost">Vous êtes sur audits.emmaus-connect.org. Les dépôts sont instantanés ici mais les recherches sont lentes dû au <strong>HDD</strong>. Vous pouvez aller sur le miroir <a href="https://audits.drop.tf/<?php echo $region; ?>">audits.drop.tf</a> pour une recherche plus rapide.</h5>
+        <?php
+        }
+        ?>
         <?php
     } else {
         ?>
         <h1 id="header">
-            AUDITS DES RÉGIONS
+            Liste des régions • <?= config('app_name') ?>
         </h1>
         <?php
     }
@@ -817,7 +841,7 @@ $region = $parentFolder;
 
             foreach ($items as $file) {
 
-                if ($file == "." || $file == ".."  || $file == "CORBEILLE"  || $file == ".gitkeep"  || $file == "vendor" || str_starts_with($file, 'composer') ||  str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, 'wallpaper.png') || str_ends_with($file, 'favicon.png') || str_ends_with($file, '.gitignore') || $file == ".git") {
+                if ($file == "." || $file == ".."  || $file == "CORBEILLE" || $file == "robots.txt" || $file == ".gitkeep" || $file == ".htaccess" || $file == "api" || $file == "vendor" || $file == "storage" || str_starts_with($file, 'composer') ||  str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, 'wallpaper.png') || str_ends_with($file, 'favicon.png') || str_ends_with($file, '.gitignore') || $file == ".git") {
                     continue;
                 }
 
@@ -1497,8 +1521,11 @@ $region = $parentFolder;
 
 echo '<table id="headerTable" style="margin-bottom:15px">';
 echo '<tr class="footer">';
-echo '<td class="">Crédits | <i><a href="//schroed.fr" target="blank_">Joffrey SCHROEDER</a> • Jean-Jacques FOUGÈRE</i></td>';
-echo '<td class=""><a href="//github.com/emmausconnect/audits-recond" target="_blank">Version ' . config('version') . '</a></td>';
+echo '<td class="" style="width:1px;white-space: pre;">Crédits</td>';
+echo '<td class="" style="white-space: pre;"><i><a href="//schroed.fr" target="blank_">Joffrey SCHROEDER</a> • Jean-Jacques FOUGÈRE</i></td>';
+echo '<td class="" style="width:1px;white-space: pre;"><a href="//github.com/emmausconnect/audits-recond" target="_blank">Version ' . config('version') . '</a></td>';
+echo '<td class="" style="width:1px;white-space: pre;"><a href="//' . config('hostname') . '/api/apps/web" target="_blank">Applications</a></td>';
+echo '<td class="" style="width:1px;white-space: pre;"><a href="//' . config('hostname') . '/api" target="_blank">API</a></td>';
 echo "</tr>";
 echo "</table>";
 

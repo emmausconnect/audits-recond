@@ -2,6 +2,20 @@
 !*/
 !*/.gitkeep
 
+# Allow specific folders and their contents
+!api/
+!api/**
+!storage/
+!storage/**
+
+# Ignore specific file types in api
+api/**/*.txt
+api/**/*.log
+
+# Ignore specific file types in storage
+storage/**/*.zip
+storage/**/*.exe
+
 # Ignore all other files in subdirectories
 */*
 !*/.gitkeep

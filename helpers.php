@@ -267,7 +267,11 @@ class Config {
     private function getConfigPath() {
         if (file_exists('../config.php')) {
             return '../config.php';
-        } elseif (file_exists('config.php')) {
+        }
+        elseif (file_exists('../../config.php')) {
+            return '../../config.php';
+        }
+        elseif (file_exists('config.php')) {
             return 'config.php';
         } elseif (file_exists('./audits/config.php')) {
             return 'config.php';
@@ -295,6 +299,150 @@ class Config {
     }
 }
 
+/**
+ * Récupère une valeur de configuration
+ *
+ * @param string $key Clé de configuration
+ * @param mixed $default Valeur par défaut
+ * @return mixed
+ */
 function config($key, $default = null) {
     return Config::getInstance()->get($key, $default);
 }
+
+/**
+ * Génère une clé API pour un utilisateur
+ *
+ * @param string $username Nom d'utilisateur
+ * @param string $password Mot de passe
+ * @return string
+ */
+function generateApiKey($username, $password) {
+    return hash('sha256', $username . ':' . $password);
+}
+
+/**
+ * Récupère tous les utilisateurs autorisés pour une région donnée
+ *
+ * @param string $region Nom de la région
+ * @return array Liste des utilisateurs
+ */
+function getRegionUsers($region) {
+    $auth = config('auth');
+    return $auth[$region] ?? [];
+}
+
+/**
+ * Récupère le préfixe d'une région à partir de son nom
+ *
+ * @param string $regionName Nom de la région
+ * @return string|null Préfixe de la région ou null si non trouvé
+ */
+function getRegionPrefix($regionName) {
+    $regions = config('regions');
+    foreach ($regions as $prefix => $name) {
+        if ($name === $regionName) {
+            return $prefix;
+        }
+    }
+    return null;
+}
+
+/**
+ * Récupère le nom d'une région à partir de son préfixe
+ *
+ * @param string $prefix Préfixe de la région
+ * @return string Nom de la région ou "_Région inconnue" si non trouvé
+ */
+function getRegionName($prefix) {
+    $regions = config('regions');
+    return $regions[$prefix] ?? "_Région inconnue";
+}
+
+/**
+ * Journalise un message dans les logs
+ *
+ * @param string $message Message à journaliser
+ * @param string $level Niveau de log (info, warning, error)
+ */
+function logMessage($message, $level = 'info') {
+    $logFile = __DIR__ . '/logs/' . date('Y-m-d') . '.log';
+
+    // Créer le répertoire de logs si nécessaire
+    $logDir = dirname($logFile);
+    if (!is_dir($logDir)) {
+        mkdir($logDir, 0755, true);
+    }
+
+    $timestamp = date('Y-m-d H:i:s');
+    $formattedMessage = "[$timestamp] [$level] $message" . PHP_EOL;
+
+    file_put_contents($logFile, $formattedMessage, FILE_APPEND);
+}
+
+/**
+ * Valide un ECID en fonction des règles de formatage
+ *
+ * @param string $ecid ID à valider
+ * @return bool
+ */
+function validateECID($ecid) {
+    // Vérifiez que l'ECID commence par un préfixe de région valide
+    $prefix = substr($ecid, 0, 2);
+    $regions = config('regions');
+
+    if (!isset($regions[$prefix])) {
+        return false;
+    }
+
+    // Vérifiez que l'ECID a un format valide (ex: XX12345)
+    return preg_match('/^[A-Z]{2}\d{5,}$/', $ecid) === 1;
+}
+
+/**
+ * Renvoie les informations de l'utilisateur actuellement authentifié
+ *
+ * @return array|null Informations utilisateur ou null si non authentifié
+ */
+function getCurrentUser() {
+    $apiKey = getApiKey();
+    if (!$apiKey) {
+        return null;
+    }
+
+    return getUserFromApiKey($apiKey);
+}
+
+function sendResponse($status, $data) {
+    http_response_code($status);
+    echo json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    exit();
+}
+
+function sendResponseAdvanced($status, $data, $headers = []) {
+    // Set HTTP status code
+    http_response_code($status);
+    
+    // Set default headers
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-cache, must-revalidate');
+    
+    // Set any additional headers
+    foreach ($headers as $key => $value) {
+        header("$key: $value");
+    }
+    
+    // Encode and output JSON
+    $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    
+    // Check for JSON encoding errors
+    if ($json === false) {
+        http_response_code(500);
+        echo json_encode(['error' => 'JSON encoding failed']);
+    } else {
+        echo $json;
+    }
+    
+    exit();
+}
+

@@ -1,0 +1,17 @@
+# Security
+Header always unset X-Powered-By
+Header unset X-Powered-By
+Header always unset server
+Header unset server
+
+# Désactiver l'indexation des fichiers et dossiers
+Options -Indexes
+
+# Protéger les fichiers
+<FilesMatch "^(\.htaccess|\.gitignore|config\.php|config\.ini|composer\.json|composer\.lock|composer\.php|.*\.sh)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+RewriteEngine On
+RewriteRule ^vendor/ - [F,L]

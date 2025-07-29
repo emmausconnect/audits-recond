@@ -10,9 +10,12 @@ $config = Config::getInstance()->all();
 // Get the region from the URL (default is empty)
 $regionFromGet = $_GET['region'] ?? '';
 
-if ($config['hostname'] !== 'audits.drop.tf') {
-    echo '<pre>Connexion impossible pour le moment depuis ce domaine, vous allez être redirigé vers <a href="https://audits.drop.tf">https://audits.drop.tf</a>.</pre>';
-    echo '<meta http-equiv="refresh" content="5;url=https://audits.drop.tf">';
+// if ($config['hostname'] !== 'audits.drop.tf') {
+if ($config['hostname'] !== 'audits.emmaus-connect.org') {
+    // echo '<pre>Connexion impossible pour le moment depuis ce domaine, vous allez être redirigé vers <a href="https://audits.drop.tf">https://audits.drop.tf</a>.</pre>';
+    echo '<pre>Connexion impossible pour le moment depuis ce domaine, vous allez être redirigé vers <a href="https://audits.emmaus-connect.org">https://audits.emmaus-connect.org</a>.</pre>';
+    // echo '<meta http-equiv="refresh" content="5;url=https://audits.drop.tf">';
+    echo '<meta http-equiv="refresh" content="5;url=https://audits.emmaus-connect.org">';
     exit();
 }
 

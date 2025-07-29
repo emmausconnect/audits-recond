@@ -1,4 +1,5 @@
 <?php
+// Configuration de la session
 session_set_cookie_params([
     'lifetime' => 3600,
     'path' => '/',
@@ -9,60 +10,149 @@ session_set_cookie_params([
 session_start();
 
 require 'helpers.php';
-$root = config('project_root_path');
 
-$hostname = $_SERVER['HTTP_HOST'];
-$region_dir = $root . "/" . $_POST["region"];
-$final_file_path = $region_dir . "/";
-$error = $_FILES['files']['error'];
-
-function createDirectoryStructure($path) {
-    if (!file_exists($path)) {
-        mkdir($path, 0777, true);
+/**
+ * Vérification de l'authentification - PRIORITAIRE
+ */
+function checkAuthentication() {
+    if (empty($_SESSION['user'])) {
+        http_response_code(401);
+        echo json_encode([
+            "success" => false,
+            "error" => true,
+            "message" => "Vous n'êtes pas connecté (session empty)."
+        ]);
+        exit;
     }
+    return true;
 }
-function handleFileUploads($final_file_path) {
-    $response = [
-        "success" => true,
-        "user" => $_SESSION['user']['username'],
-        "acl" => $_SESSION['user']['acl'],
-        "files" => [],
-        "errors" => []
-    ];
 
-    // Vérifier si des fichiers ont été uploadés
+/**
+ * Vérification des autorisations
+ */
+function checkAuthorization($requestedRegion) {
+    if (!isset($_SESSION['user']['region']) || $requestedRegion !== $_SESSION['user']['region']) {
+        http_response_code(403);
+        echo json_encode([
+            "success" => false,
+            "message" => "Non autorisé - région non autorisée"
+        ]);
+        exit;
+    }
+    return true;
+}
+
+/**
+ * Validation des données POST
+ */
+function validatePostData() {
+    if (!isset($_POST['region']) || empty(trim($_POST['region']))) {
+        http_response_code(400);
+        echo json_encode([
+            "success" => false,
+            "message" => "Région non spécifiée"
+        ]);
+        exit;
+    }
+    
     if (empty($_FILES['files'])) {
         http_response_code(400);
-        return json_encode([
+        echo json_encode([
             "success" => false,
             "message" => "Aucun fichier reçu"
         ]);
+        exit;
     }
+    
+    return true;
+}
 
+/**
+ * Création de la structure de répertoire
+ */
+function createDirectoryStructure($path) {
+    if (!file_exists($path)) {
+        if (!mkdir($path, 0777, true)) {
+            throw new Exception("Impossible de créer le répertoire : " . $path);
+        }
+    }
+}
+
+/**
+ * Gestion des uploads de fichiers
+ */
+function handleFileUploads($final_file_path) {
+    $response = [
+        "success" => true,
+        "user" => $_SESSION['user']['username'] ?? 'unknown',
+        "acl" => $_SESSION['user']['acl'] ?? 'none',
+        "files" => [],
+        "errors" => []
+    ];
+    
     // Parcourir tous les fichiers
-    foreach ($_FILES['files']['name'] as $key => $filename) {
+    $fileCount = count($_FILES['files']['name']);
+    
+    for ($key = 0; $key < $fileCount; $key++) {
+        // Vérifier si l'index existe pour éviter les warnings
+        if (!isset($_FILES['files']['name'][$key]) || 
+            !isset($_FILES['files']['tmp_name'][$key]) ||
+            !isset($_FILES['files']['error'][$key])) {
+            continue;
+        }
+        
+        $filename = $_FILES['files']['name'][$key];
         $from = $_FILES['files']['tmp_name'][$key];
-
+        $error = $_FILES['files']['error'][$key];
+        
+        // Vérifier les erreurs d'upload
+        if ($error !== UPLOAD_ERR_OK) {
+            $response['errors'][] = [
+                "filename" => $filename,
+                "error" => "Erreur d'upload (code: " . $error . ")"
+            ];
+            $response['success'] = false;
+            continue;
+        }
+        
+        // Validation du nom de fichier
+        if (empty($filename) || empty($from)) {
+            $response['errors'][] = [
+                "filename" => $filename ?: 'fichier_inconnu',
+                "error" => "Nom de fichier ou chemin temporaire vide"
+            ];
+            $response['success'] = false;
+            continue;
+        }
+        
         // Récupérer le chemin relatif
         $relativePath = isset($_POST['paths'][$key]) ? trim($_POST['paths'][$key], '/') : '';
-
+        
         // Si le chemin est "Files", traiter comme un fichier à la racine
         if ($relativePath === 'Files') {
             $relativePath = '';
         }
-
+        
         // Construire le chemin complet
-        $fullPath = $final_file_path;
-        if ($relativePath) {
+        $fullPath = rtrim($final_file_path, '/');
+        if (!empty($relativePath)) {
             $fullPath .= '/' . $relativePath;
+            
             // Créer le dossier si nécessaire
-            if (!file_exists($fullPath)) {
-                mkdir($fullPath, 0777, true);
+            try {
+                createDirectoryStructure($fullPath);
+            } catch (Exception $e) {
+                $response['errors'][] = [
+                    "filename" => $filename,
+                    "error" => "Impossible de créer le répertoire: " . $e->getMessage()
+                ];
+                $response['success'] = false;
+                continue;
             }
         }
-
-        $to = $fullPath . '/' . $filename;
-
+        
+        $to = $fullPath . '/' . basename($filename); // basename pour la sécurité
+        
         // Tenter de déplacer le fichier
         if (move_uploaded_file($from, $to)) {
             $response['files'][] = [
@@ -74,40 +164,56 @@ function handleFileUploads($final_file_path) {
             $response['errors'][] = [
                 "filename" => $filename,
                 "path" => $to,
-                "error" => "Échec de l'upload"
+                "error" => "Échec de l'upload - impossible de déplacer le fichier"
             ];
             $response['success'] = false;
         }
     }
-
+    
     http_response_code($response['success'] ? 200 : 400);
     return json_encode($response);
 }
 
-if (!is_dir($region_dir)) {
-    $nozone = "_Région inconnue";
-    $final_file_path = $root . "/" . $nozone . "/";
-}
+// === EXECUTION PRINCIPALE ===
 
-$isLogged = false;
-if (empty($_SESSION['user'])) {
+try {
+    // 1. Vérification de l'authentification (PRIORITAIRE)
+    checkAuthentication();
+    
+    // 2. Validation des données POST
+    validatePostData();
+    
+    // 3. Vérification des autorisations
+    checkAuthorization($_POST['region']);
+    
+    // 4. Configuration des chemins
+    $root = config('project_root_path');
+    $region = trim($_POST['region']);
+    $region_dir = $root . "/" . $region;
+    $final_file_path = $region_dir . "/";
+    
+    // 5. Vérification/création du répertoire de région
+    if (!is_dir($region_dir)) {
+        $nozone = "_Région_inconnue";
+        $final_file_path = $root . "/" . $nozone . "/";
+    }
+    
+    // 6. Création de la structure de répertoire
+    createDirectoryStructure(dirname($final_file_path));
+    
+    // 7. Traitement des uploads
+    echo handleFileUploads($final_file_path);
+    
+} catch (Exception $e) {
+    http_response_code(500);
     echo json_encode([
         "success" => false,
-        "error" => true,
-        "message" => "Vous n'êtes pas connecté (session empty)."
+        "message" => "Erreur serveur: " . $e->getMessage()
     ]);
-} else {
-    if ($_POST['region'] === $_SESSION['user']['region']) {
-        $isLogged = true;
-        $username = $_SESSION['user']['username'];
-        $acl      = $_SESSION['user']['acl'];
-        $prefix   = $_SESSION['user']['prefix'];
-        echo handleFileUploads($final_file_path);
-    } else {
-        http_response_code(401);
-        echo json_encode([
-            "success" => false,
-            "message" => "Non autorisé"
-        ]);
-    }
+} catch (Error $e) {
+    http_response_code(500);
+    echo json_encode([
+        "success" => false,
+        "message" => "Erreur fatale: " . $e->getMessage()
+    ]);
 }
