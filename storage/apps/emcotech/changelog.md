@@ -1,3 +1,26 @@
+🍉 v2.3.0 🍉 | 17/08/25
+
+———— Inititalisation PC ————
+
++ Lors de l'installation Firefox,
+  Désactivation des fonctionnalités d'IA de Firefox  et des Smart Tab Groups.
+
+  Les flags mis sur false sont les suivants :
+  browser.ml.enable, browser.tabs.groups.smart.enabled,
+  browser.tabs.groups.smart.optin, browser.tabs.groups.smart.userEnabled,
+  browser.tabs.groups.enabled
+
+———— Audits ————
+
++ Lors de la demande "Envoi vers le BOLC", le bouton "Envoyer" est
+  sélectionné par défaut, plutôt que le bouton "Ne pas envoyer".
+  Permettant de valider l'envoi avec la touche "Entrer" directement.
+
+———— Audits PC ————
++ Hotfix à la 4.8.1 du Jean-Jacques pour corriger la catégorie
+  maximum pour les CPU avec < 3500 points.
+
+
 🍉 v2.2.12 🍉 | 23/07/25
 
 ———— Inititalisation PC ————
@@ -604,7 +627,7 @@ Date: 01/06/24 en stable
 
 ———— Audit PC ————
 
-+ **Ajout de l'envoie automatique vers le BOLC.**
++ **Ajout de l'envoi automatique vers le BOLC.**
 + Amélioration visuelle de l'interface de mi-audit.
 + Ajout du champs "Bénévole en charge du reconditionnement".
 + Ajout du champs "Statut materiel en PA".
@@ -614,9 +637,9 @@ Date: 01/06/24 en stable
 
 + Dans la fenêtre "Observations et pondération", ajout d'un lien vers Kimovil
   pour le téléphone en cours de traitement.
-+ Dans la fenêtre d'envoie vers le BOLC, l'ID unique de l'appareil est affiché.
++ Dans la fenêtre d'envoi vers le BOLC, l'ID unique de l'appareil est affiché.
 + Ajout de Lyon et Créteil dans dans la liste des participants à la bêta de
-  l'envoie automatique vers le BOLC.
+  l'envoi automatique vers le BOLC.
 
         v1.8.16
 
@@ -657,9 +680,9 @@ Date: 26/04/24 en stable
 
 ———— Audit Android ————
 
-+ (Strasbourg) Envoie automatique de l'audit html vers le serveur de partage.
++ (Strasbourg) Envoi automatique de l'audit html vers le serveur de partage.
 + Ajout de Saint-Denis, Marseille et Grenoble dans la liste des participants
-  à la bêta de l'envoie automatique vers le BOLC.
+  à la bêta de l'envoi automatique vers le BOLC.
 + Ajout des conseils pour l'impression de la nano-fiche.
 + Suppression des autres types de mini-fiche.
 + L'ouverture de la nano-fiche ouvre maintenant la boîte d'impression.
@@ -676,7 +699,7 @@ Date: 25/03/24 en stable
   En attendant la mise à jour du BOLC avec le support de la catégorie "MARAUDE".
 
 + Ajout de Lille dans la liste des participants à la bêta de
-  l'envoie automatique vers le BOLC.
+  l'envoi automatique vers le BOLC.
 
         v1.8.11
 Date: 18/03/24 en stable
@@ -691,14 +714,14 @@ Date: 18/03/24 en stable
 ———— Audit Android ————
 
 + Ajout de Maison-Blanche dans la liste des participants à la bêta de
-  l'envoie automatique vers le BOLC.
+  l'envoi automatique vers le BOLC.
 
         v1.8.10
 Date: 16/03/24 en stable
 
 ———— Audit Android ————
 
-+ Envoie automatique vers le BOLC en bêta pour la région de Strasbourg.
++ Envoi automatique vers le BOLC en bêta pour la région de Strasbourg.
   Une fenêtre vous demandant si vous souhaitez envoyer l'audit vers le BOLC
   apparaît après la fenêtre Observations & pondérations.
 

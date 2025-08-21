@@ -457,11 +457,6 @@ function uploadZip($user)
     $regions = config("regions");
     $region = isset($regions[$prefix]) ? $regions[$prefix] : "_Région inconnue";
 
-    // Vérifier si l'utilisateur a accès à cette région
-    // if (!hasRegionAccess($user, $region)) {
-    //     sendResponse(403, ['error' => true, 'message' => 'Accès non autorisé à cette région']);
-    // }
-
     // Chemin du répertoire de la région
     $region_dir = config("project_root_path") . "/" . $region;
 
@@ -478,13 +473,21 @@ function uploadZip($user)
         // Déterminez le répertoire de destination basé sur ecid
         $ecid_dir = $region_dir . "/" . $ecid;
 
-        // Gérer le répertoire ecid
+        // Si le dossier existe déjà, le déplacer dans "CORBEILLE"
         if (is_dir($ecid_dir)) {
-            deleteDir($ecid_dir);
-            mkdir($ecid_dir, 0755, true);
-        } else {
-            mkdir($ecid_dir, 0755, true);
+            $corbeille_dir = $region_dir . "/CORBEILLE";
+            if (!is_dir($corbeille_dir)) {
+                mkdir($corbeille_dir, 0755, true);
+            }
+            // Générer un nom unique pour éviter les collisions
+            $timestamp = date("Ymd_His");
+            $corbeille_target = $corbeille_dir . "/" . $ecid . "_" . $timestamp;
+            // Déplacer le dossier existant
+            rename($ecid_dir, $corbeille_target);
         }
+
+        // Créer le nouveau dossier ecid
+        mkdir($ecid_dir, 0755, true);
 
         // Déplacer le fichier téléchargé
         $destination = $ecid_dir . "/" . $filename;
@@ -541,13 +544,6 @@ function uploadAudit()
     }
 
     $region = $_POST["region"];
-
-    // Vérifier si l'utilisateur a accès à cette région
-    // if (!hasRegionAccess($user, $region)) {
-    //     sendResponse(403, ['error' => true, 'message' => 'Accès non autorisé à cette région']);
-    // }
-
-    // Chemin du répertoire de la région
     $region_dir = config("project_root_path") . "/" . $region;
 
     // Vérifiez que le fichier est bien téléchargé
@@ -568,7 +564,19 @@ function uploadAudit()
             }
         }
 
-        // Déplacer le fichier téléchargé
+        // Si le fichier existe déjà, le déplacer dans "CORBEILLE"
+        if (file_exists($final_file_path)) {
+            $corbeille_dir = $region_dir . "/CORBEILLE";
+            if (!is_dir($corbeille_dir)) {
+                mkdir($corbeille_dir, 0755, true);
+            }
+            // Générer un nom unique pour éviter les collisions
+            $timestamp = date("Ymd_His");
+            $corbeille_target = $corbeille_dir . "/" . pathinfo($filename, PATHINFO_FILENAME) . "_" . $timestamp . "." . pathinfo($filename, PATHINFO_EXTENSION);
+            rename($final_file_path, $corbeille_target);
+        }
+
+        // Déplacer le nouveau fichier téléchargé
         if (move_uploaded_file($uploaded_file, $final_file_path)) {
             sendResponse(200, [
                 "message" => "Fichier audit reçu avec succès",
