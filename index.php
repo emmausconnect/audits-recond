@@ -41,24 +41,24 @@ $region = $parentFolder;
 
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="robots" content="noindex, nofollow">
     <link rel="icon" type="image/x-icon" href="/favicon.png">
     <?php
     if ($isSubdir) {
-    ?>
+        ?>
         <title><?= $parentFolder ?> • <?= config('app_name') ?></title>
-    <?php
-    }
-    else {
-    ?>
+        <?php
+    } else {
+        ?>
         <title>Liste des régions • <?= config('app_name') ?></title>
-    <?php
+        <?php
     }
     ?>
     <style>
-        @import url('//fonts.cdnfonts.com/css/jetbrains-mono-2');
+        /* @import url('//fonts.cdnfonts.com/css/jetbrains-mono-2'); */
 
         :root {
             --font-family: "JetBrains Mono", monospace;
@@ -73,12 +73,17 @@ $region = $parentFolder;
             --file-link-color: blue;
             --audit-count-color: #666;
             --format-file-span: #d00000;
-
+            --error-color: #ff6b6b;
             --border-thickness: 2px;
             --font-weight-normal: 500;
             --font-weight-medium: 600;
             --font-weight-bold: 800;
             --line-height: 1.20rem;
+            --font-size: 15px;
+            /* Loading overlay variables */
+            --overlay-background: rgba(255, 255, 255, 0.85);
+            --spinner-base-color: #f3f3f3;
+            --spinner-accent-color: #3498db;
 
             font-family: var(--font-family);
             font-optical-sizing: auto;
@@ -86,7 +91,6 @@ $region = $parentFolder;
             font-style: normal;
             font-variant-numeric: tabular-nums lining-nums;
             font-size: 15px;
-            --font-size: 15px;
         }
 
         @media (prefers-color-scheme: dark) {
@@ -95,13 +99,17 @@ $region = $parentFolder;
                 --text-color-alt: #aaa;
                 --text-color-warning: rgb(245, 129, 129);
                 --background-color: #000;
-                --background-color-alt:#212121;
+                --background-color-alt: #212121;
                 --background-color-hover: #484848;
                 --border-color: #606060;
                 --drop-box-files-background: #151515;
                 --file-link-color: #0affdd;
                 --audit-count-color: #a4a4a4;
                 --format-file-span: #f00;
+                /* Loading overlay dark mode variables */
+                --overlay-background: rgba(0, 0, 0, 0.85);
+                --spinner-base-color: #555;
+                --spinner-accent-color: #64b5f6;
             }
         }
 
@@ -109,7 +117,7 @@ $region = $parentFolder;
             box-sizing: border-box;
         }
 
-        * + * {
+        *+* {
             /* margin-top: var(--line-height); */
         }
 
@@ -128,7 +136,8 @@ $region = $parentFolder;
             text-decoration-thickness: var(--border-thickness);
         }
 
-        a:link, a:visited {
+        a:link,
+        a:visited {
             color: var(--text-color);
         }
 
@@ -194,6 +203,9 @@ $region = $parentFolder;
             border: var(--border-thickness) solid var(--border-color);
         }
 
+        #searchBox:invalid {
+            border-color: var(--error-color);
+        }
 
         /* body {
             position: relative;
@@ -229,25 +241,30 @@ $region = $parentFolder;
             border: 1px solid #ddd;
             border-radius: 4px;
         }
+
         .folder-group h4 {
             margin: 0 0 10px 0;
         }
+
         .remove-file {
             background: none;
             border: none;
             cursor: pointer;
             padding: 0 5px;
         }
+
         .folder-group ul {
             list-style: none;
             padding-left: 20px;
         }
+
         .folder-group li {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 2px 0;
         }
+
         .auth-infos {
             margin-top: 10px;
             display: block;
@@ -270,7 +287,8 @@ $region = $parentFolder;
             border-collapse: collapse;
         }
 
-        th, td {
+        th,
+        td {
             padding: 6px;
             text-align: left;
             border: var(--border-thickness) solid var(--border-color);
@@ -333,8 +351,6 @@ $region = $parentFolder;
             color: inherit;
         }
 
-
-
         .table-row-link:hover,
         .table-row-link:hover .file-link,
         .table-row-link:hover .date-cell,
@@ -373,12 +389,52 @@ $region = $parentFolder;
             width: 370px;
         }
 
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: var(--overlay-background);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 8px solid var(--spinner-base-color);
+            border-top: 8px solid var(--spinner-accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        #loading-message {
+            margin-top: 20px;
+            color: var(--text-color);
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
 
         @media (max-width: 1300px) {
             body {
                 margin: 0;
                 max-width: unset;
             }
+
             html {
                 padding: 10px;
             }
@@ -393,10 +449,206 @@ $region = $parentFolder;
             }
         }
     </style>
+
+    <style>
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: normal;
+            font-weight: 400;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoRegular.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: italic;
+            font-weight: 400;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: normal;
+            font-weight: 100;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoThin.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: italic;
+            font-weight: 100;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoThinItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: normal;
+            font-weight: 200;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoExtraLight.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: italic;
+            font-weight: 200;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoExtraLightItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: normal;
+            font-weight: 300;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoLight.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: italic;
+            font-weight: 300;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoLightItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: normal;
+            font-weight: 500;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoMedium.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: italic;
+            font-weight: 500;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoMediumItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: normal;
+            font-weight: 600;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoSemiBold.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: italic;
+            font-weight: 600;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoSemiBoldItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: normal;
+            font-weight: 700;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoBold.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: italic;
+            font-weight: 700;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoBoldItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: normal;
+            font-weight: 800;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoExtraBold.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: italic;
+            font-weight: 800;
+            src: local('JetBrains Mono'), url('/fonts/JetBrainsMonoExtraBoldItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: normal;
+            font-weight: 400;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLRegular.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: italic;
+            font-weight: 400;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: normal;
+            font-weight: 100;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLThin.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: italic;
+            font-weight: 100;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLThinItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: normal;
+            font-weight: 200;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLExtraLight.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: italic;
+            font-weight: 200;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLExtraLightItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: normal;
+            font-weight: 300;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLLight.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: italic;
+            font-weight: 300;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLLightItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: normal;
+            font-weight: 500;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLMedium.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: italic;
+            font-weight: 500;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLMediumItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: normal;
+            font-weight: 600;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLSemiBold.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: italic;
+            font-weight: 600;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLSemiBoldItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: normal;
+            font-weight: 700;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLBold.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: italic;
+            font-weight: 700;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLBoldItalic.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: normal;
+            font-weight: 800;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLExtraBold.woff') format('woff');
+        }
+        @font-face {
+            font-family: 'JetBrains Mono NL';
+            font-style: italic;
+            font-weight: 800;
+            src: local('JetBrains Mono NL'), url('/fonts/JetBrainsMonoNLExtraBoldItalic.woff') format('woff');
+        }
+    </style>
     <style>
         #container-upload {
             display: flex;
-            gap: 20px; /* Espace entre les deux box */
+            gap: 20px;
+            /* Espace entre les deux box */
         }
 
         #drop-box-files,
@@ -439,7 +691,8 @@ $region = $parentFolder;
         }
 
         /* Hidden file input */
-        #file-input, #folder-input {
+        #file-input,
+        #folder-input {
             display: none;
         }
 
@@ -450,7 +703,8 @@ $region = $parentFolder;
             padding-left: 10px;
             border: 1px solid #ccc;
             font-size: 14px;
-            display: none;  /* Hidden by default */
+            display: none;
+            /* Hidden by default */
         }
 
         /* Styling for send button */
@@ -461,7 +715,8 @@ $region = $parentFolder;
             color: white;
             border: none;
             cursor: pointer;
-            display: none;  /* Hidden by default */
+            display: none;
+            /* Hidden by default */
         }
 
         #send-button:disabled {
@@ -480,6 +735,7 @@ $region = $parentFolder;
             flex-direction: column;
             gap: 10px;
         }
+
         .notification {
             padding: 12px 24px;
             border-radius: 4px;
@@ -488,7 +744,7 @@ $region = $parentFolder;
             opacity: 0;
             transform: translateY(-20px);
             transition: all 0.3s ease;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
 
         .notification.show {
@@ -513,14 +769,14 @@ $region = $parentFolder;
         }
     </style>
 </head>
+
 <body>
     <?php
     if (isset($_GET['page']) && $_GET['page'] === 'login' && !$isSubdir) {
         if (empty($_SESSION['user'])) {
             include('login.php');
-        }
-        else {
-            echo '<meta http-equiv="refresh" content="0;url=/'. $_SESSION['user']['region'] .'">';
+        } else {
+            echo '<meta http-equiv="refresh" content="0;url=/' . $_SESSION['user']['region'] . '">';
         }
         exit();
     }
@@ -536,9 +792,9 @@ $region = $parentFolder;
         } else {
             if ($_SESSION['user']['acl'] <= 9) {
                 if ($region !== $_SESSION['user']['region']) {
-                ?>
+                    ?>
                     <a href="../?page=login&region=<?php echo $region; ?>">Se connecter</a>
-                <?php
+                    <?php
                 } else {
                     if (config('debug')) {
                         var_dump($_SESSION['user']);
@@ -546,9 +802,9 @@ $region = $parentFolder;
 
                     $isLogged = true;
                     $username = $_SESSION['user']['username'];
-                    $email    = $_SESSION['user']['email'];
-                    $acl      = $_SESSION['user']['acl'];
-                    $prefix   = $_SESSION['user']['prefix'];
+                    $email = $_SESSION['user']['email'];
+                    $acl = $_SESSION['user']['acl'];
+                    $prefix = $_SESSION['user']['prefix'];
 
                     echo 'Connecté en tant que <strong>' . $_SESSION['user']['username'] . '</strong>. <a class="login-link" href="/logout.php?region=' . $region . '">Se déconnecter</a>.';
                 }
@@ -560,9 +816,9 @@ $region = $parentFolder;
 
                 $isLogged = true;
                 $username = $_SESSION['user']['username'];
-                $email    = $_SESSION['user']['email'];
-                $acl      = $_SESSION['user']['acl'];
-                $prefix   = $_SESSION['user']['prefix'];
+                $email = $_SESSION['user']['email'];
+                $acl = $_SESSION['user']['acl'];
+                $prefix = $_SESSION['user']['prefix'];
 
                 echo 'Connecté en tant que <strong>' . $_SESSION['user']['username'] . '</strong>. <a class="login-link" href="/logout.php?region=' . $region . '">Se déconnecter</a>.';
             }
@@ -575,18 +831,19 @@ $region = $parentFolder;
     <?php
     $files = array_filter(glob("*"), function ($file) {
         return $file !== "index.html"
-        && $file !== "index.php"
-        && $file !== '.gitkeep'
-        && $file !== ".htaccess"
-        && $file !== "search.php"
-        && $file !== "CORBEILLE"
-        && $file !== "api"
-        && $file !== "vendor"
-        && $file !== "storage"
-        && $file !== "composer.lock"
-        && $file !== "composer.json"
-        && $file !== "."
-        && $file !== "..";
+            && $file !== "index.php"
+            && $file !== '.gitkeep'
+            && $file !== ".htaccess"
+            && $file !== "search.php"
+            && $file !== "CORBEILLE"
+            && $file !== "api"
+            && $file !== "vendor"
+            && $file !== "fonts"
+            && $file !== "storage"
+            && $file !== "composer.lock"
+            && $file !== "composer.json"
+            && $file !== "."
+            && $file !== "..";
     });
     $auditCount = count($files);
 
@@ -606,14 +863,17 @@ $region = $parentFolder;
 
         <?php
         if (config('hostname') === 'audits.drop.tf') {
-        ?>
-            <h5 class="warningHost">Vous êtes sur le miroir audits.drop.tf. Les dépôts sont décalés d'une minute mais les recherches sont rapides grâce à un <strong>SSD</strong>. La version officielle du dépôt disponible en cliquant ici : <a href="https://audits.emmaus-connect.org/<?php echo $region; ?>">audits.emmaus-connect.org</a>.</h5>
-        <?php
-        }
-        else {
-        ?>
-            <h5 class="warningHost">Vous êtes sur audits.emmaus-connect.org. Les dépôts sont instantanés ici mais les recherches sont lentes dû au <strong>HDD</strong>. Vous pouvez aller sur le miroir <a href="https://audits.drop.tf/<?php echo $region; ?>">audits.drop.tf</a> pour une recherche plus rapide.</h5>
-        <?php
+            ?>
+            <h5 class="warningHost">Vous êtes sur le miroir audits.drop.tf. Les dépôts sont décalés d'une minute mais les
+                recherches sont rapides grâce à un <strong>SSD</strong>. La version officielle du dépôt disponible en cliquant
+                ici : <a href="https://audits.emmaus-connect.org/<?php echo $region; ?>">audits.emmaus-connect.org</a>.</h5>
+            <?php
+        } else {
+            ?>
+            <h5 class="warningHost">Vous êtes sur audits.emmaus-connect.org. Les dépôts sont instantanés ici mais les recherches
+                sont lentes dû au <strong>HDD</strong>. Vous pouvez aller sur le miroir <a
+                    href="https://audits.drop.tf/<?php echo $region; ?>">audits.drop.tf</a> pour une recherche plus rapide.</h5>
+            <?php
         }
         ?>
         <?php
@@ -631,25 +891,25 @@ $region = $parentFolder;
         ?>
         <div id="container-upload">
             <div id="drop-box-files">
-            <span>
-                <div id="drag-overlay-files">📃 Relâcher pour déposer le fichier.</div>
-                📃 Glisser des fichiers ici, ou me cliquer pour sélectionner des
-                <span class="clickable" id="select-files">fichiers</span> ou des
-                <span class="clickable" id="select-folder">dossiers</span>
-                <br />
-                <span class="format-file-subtitle">
-                    <span class="format-file-span">Format fichier</span>
-                    <span> : <?php echo $prefix; ?>XX24-0000.html</span> •
-                    <span class="format-file-span">Format dossier</span>
-                    <span> : <?php echo $prefix; ?>XX24-0000</span>
+                <span>
+                    <div id="drag-overlay-files">📃 Relâcher pour déposer le fichier.</div>
+                    📃 Glisser des fichiers ici, ou me cliquer pour sélectionner des
+                    <span class="clickable" id="select-files">fichiers</span> ou des
+                    <span class="clickable" id="select-folder">dossiers</span>
+                    <br />
+                    <span class="format-file-subtitle">
+                        <span class="format-file-span">Format fichier</span>
+                        <span> : <?php echo $prefix; ?>XX24-0000.html</span> •
+                        <span class="format-file-span">Format dossier</span>
+                        <span> : <?php echo $prefix; ?>XX24-0000</span>
+                    </span>
                 </span>
-            </span>
 
-            <!-- Input caché pour les fichiers -->
-            <input type="file" id="file-input" accept=".html" multiple style="display: none">
+                <!-- Input caché pour les fichiers -->
+                <input type="file" id="file-input" accept=".html" multiple style="display: none">
 
-            <!-- Input caché pour les dossiers -->
-            <input type="file" id="folder-input" webkitdirectory style="display: none">
+                <!-- Input caché pour les dossiers -->
+                <input type="file" id="folder-input" webkitdirectory style="display: none">
             </div>
         </div>
 
@@ -702,22 +962,21 @@ $region = $parentFolder;
     <?php
     if ($isSubdir) {
         if ($path == '.') {
-        ?>
-        <table class='search-file'>
-            <input type="text" id="searchBox" placeholder="Rechercher dans les fichiers..."
-                style="width: 100%; padding: 8px;">
-        </table>
-        <span>/</span><br /><br />
-        <?php
-        }
-        else {
-            echo '<span>' . substr($path, 1) . '</span><br /><br />';
+            ?>
+            <table class='search-file'>
+                <input type="text" id="searchBox" minlength="3" placeholder="Recherche (imei, processeur, ram, stockage, marque, bénévole... • min. 3 caractères)"
+                    title="Veuillez saisir au moins 3 caractères" style="width: 100%; padding: 8px;">
+            </table>
+            <span>/</span>
+            <?php
+        } else {
+            echo '<span>' . substr($path, 1) . '</span>';
         }
     }
     ?>
 
     <div id="searchResults" style="display: none;">
-        <h2>Résultats de recherche</h2>
+        <h2>Résultats de recherche <span id="resultCount"></span></h2>
         <table id="searchResultsTable">
             <thead>
                 <tr>
@@ -732,35 +991,55 @@ $region = $parentFolder;
         </table>
     </div>
 
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <p id="loading-message"></p>
+    </div>
+
+    <br /><br />
+
     <script>
         let searchTimeout;
-        let parentFolder = '<?php echo $parentFolder; ?>';
+        let parentFolder = '<?php echo $parentFolder; ?> ';
+        // Make sure these elements exist in your HTML
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingMessage = document.getElementById('loading-message');
+
         document.getElementById('searchBox').addEventListener('input', function (e) {
-    clearTimeout(searchTimeout);
-    const searchTerm = e.target.value.trim();
-    const fileTable = document.getElementById('fileTable');
-    const searchResults = document.getElementById('searchResults');
-    const isLogged = '<?php echo $isLogged; ?>';
-    const isSubsubdir = '<?php echo $isSubsubdir; ?>';
-    const isCorbeille = '<?php echo $isCorbeille; ?>';
+            clearTimeout(searchTimeout);
+            const searchTerm = e.target.value.trim();
+            const fileTable = document.getElementById('fileTable');
+            const searchResults = document.getElementById('searchResults');
+            const isLogged = '<?php echo $isLogged; ?>';
+            const isSubsubdir = '<?php echo $isSubsubdir; ?>';
+            const isCorbeille = '<?php echo $isCorbeille; ?>';
 
-    if (searchTerm.length >= 2) {
-        searchTimeout = setTimeout(() => {
-            fetch(`search.php?term=${encodeURIComponent(searchTerm)}`)
-                .then(response => response.json())
-                .then(results => {
-                    const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
-                    searchResultsTable.innerHTML = '';
+            if (searchTerm.length >= 3) {
+                searchTimeout = setTimeout(() => {
+                    loadingMessage.textContent = 'Recherche des fichiers correspondants...';
+                    loadingOverlay.style.display = 'flex';
 
-                    if (results.length > 0) {
-                        fileTable.style.display = 'none';
-                        searchResults.style.display = 'block';
+                    fetch(`search.php?term=${encodeURIComponent(searchTerm)}`)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('La réponse du réseau n\'était pas bonne');
+                            }
+                            return response.json();
+                        })
+                        .then(results => {
+                            const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
+                            searchResultsTable.innerHTML = '';
 
-                        results.forEach(file => {
-                            const row = document.createElement('tr');
+                            if (results.length > 0) {
+                                fileTable.style.display = 'none';
+                                searchResults.style.display = 'block';
+                                resultCount.textContent = `(${results.length} résultat${results.length > 1 ? 's' : ''})`;
 
-                            if (file.isDir) {
-                                row.innerHTML = `
+                                results.forEach(file => {
+                                    const row = document.createElement('tr');
+
+                                    if (file.isDir) {
+                                        row.innerHTML = `
                                     <td class='dl-cell'><a class='download-link' title='Télécharger le dossier' href="/zip.php?path=./${parentFolder}/${file.path}" download>⬇️</a></td>
                                     <td class='file-cell'>
                                     ${isLogged && !isSubsubdir ? `<span class='delete-btn' data-path='${file.path}' data-type='dir'>❌</span>` : ''}
@@ -771,9 +1050,8 @@ $region = $parentFolder;
                                     <td class='date-cell'>${formatDate(file.timestamp)}</td>
                                     <td style='display: none;' data-timestamp="${file.timestamp}">${file.timestamp}</td>
                                 `;
-                            }
-                            else {
-                                row.innerHTML = `
+                                    } else {
+                                        row.innerHTML = `
                                     <td class='dl-cell'><a class='download-link' title='Télécharger' href="${file.path}" download>⬇️</a></td>
                                     <td class='file-cell'>
                                     ${isLogged && !isSubsubdir ? `<span class='delete-btn' data-path='${file.path}' data-type='file'>❌</span>` : ''}
@@ -784,21 +1062,33 @@ $region = $parentFolder;
                                     <td class='date-cell'>${formatDate(file.timestamp)}</td>
                                     <td style='display: none;' data-timestamp="${file.timestamp}">${file.timestamp}</td>
                                 `;
+                                    }
+                                    searchResultsTable.appendChild(row);
+                                });
+                            } else {
+                                searchResultsTable.innerHTML = '<tr><td colspan="4">Aucun résultat trouvé</td></tr>';
+                                searchResults.style.display = 'block';
+                                fileTable.style.display = 'none';
+                                resultCount.textContent = '(0 résultat)';
                             }
-                            searchResultsTable.appendChild(row);
+                        })
+                        .catch(error => {
+                            console.error('Erreur de recherche:', error);
+                            const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
+                            searchResultsTable.innerHTML = '<tr><td colspan="4">Une erreur est survenue lors de la recherche.</td></tr>';
+                            fileTable.style.display = 'none';
+                            searchResults.style.display = 'block';
+                            resultCount.textContent = '';
+                        })
+                        .finally(() => {
+                            loadingOverlay.style.display = 'none';
                         });
-                    } else {
-                        searchResultsTable.innerHTML = '<tr><td colspan="4">Aucun résultat trouvé</td></tr>';
-                        searchResults.style.display = 'block';
-                        fileTable.style.display = 'none';
-                    }
-                });
-        }, 300);
-    } else {
-        searchResults.style.display = 'none';
-        fileTable.style.display = 'table';
-    }
-});
+                }, 300);
+            } else {
+                searchResults.style.display = 'none';
+                fileTable.style.display = 'table';
+            }
+        });
 
         function formatDate(timestamp) {
             const months = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
@@ -841,7 +1131,7 @@ $region = $parentFolder;
 
             foreach ($items as $file) {
 
-                if ($file == "." || $file == ".."  || $file == "CORBEILLE" || $file == "robots.txt" || $file == ".gitkeep" || $file == ".htaccess" || $file == "api" || $file == "vendor" || $file == "storage" || str_starts_with($file, 'composer') ||  str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, 'wallpaper.png') || str_ends_with($file, 'favicon.png') || str_ends_with($file, '.gitignore') || $file == ".git") {
+                if ($file == "." || $file == ".." || $file == "CORBEILLE" || $file == "robots.txt" || $file == ".gitkeep" || $file == ".htaccess" || $file == "api" || $file == "vendor" || $file == "fonts" || $file == "storage" || str_starts_with($file, 'composer') || str_ends_with($file, '.php') || str_ends_with($file, '.sh') || str_ends_with($file, '.md') || str_ends_with($file, 'wallpaper.png') || str_ends_with($file, 'favicon.png') || str_ends_with($file, '.gitignore') || $file == ".git") {
                     continue;
                 }
 
@@ -868,7 +1158,7 @@ $region = $parentFolder;
                 //     echo "<td class='dl-cell'><a class='download-link' title='Télécharger' href=\"$item_path\" download>⬇️</a></td>";
                 //     echo "<td class='file-cell'><span class=\"icon\">" . $icon . "</span><a class='file-link file-or-folder-link' href=\"$item_path\" target=\"_blank\">$fileName</a></td>";
                 // }
-
+            
                 if ($is_dir) {
                     if ($isSubdir) {
                         echo "<td class='dl-cell'><a class='download-link' title='Télécharger le dossier' href=\"/zip.php?path=./$parentFolder/$item_path\" download>⬇️</a></td>";
@@ -1071,35 +1361,35 @@ $region = $parentFolder;
 
         // Fonction modifiée pour accumuler les fichiers
         const displayFiles = (files, folderName = null) => {
-        if (folderName) {
-            console.log(`Ajout des fichiers du dossier: ${folderName}`);
-        }
+            if (folderName) {
+                console.log(`Ajout des fichiers du dossier: ${folderName}`);
+            }
 
-        // Ajouter les nouveaux fichiers à la collection existante
-        allSelectedFiles = [...allSelectedFiles, ...Array.from(files)];
+            // Ajouter les nouveaux fichiers à la collection existante
+            allSelectedFiles = [...allSelectedFiles, ...Array.from(files)];
 
-        // Mise à jour de l'affichage
-        if (allSelectedFiles.length === 0) {
-            fileList.innerHTML = '<p>Aucun fichier sélectionné.</p>';
-            fileList.style.display = 'none';
-            sendButton.style.display = 'none';
-        } else {
-            // Grouper les fichiers par dossier
-            const filesByFolder = new Map();
-            allSelectedFiles.forEach(file => {
-                // Détermine le nom du dossier (soit depuis webkitRelativePath, soit depuis notre contexte)
-                const folderName = file.webkitRelativePath
-                    ? file.webkitRelativePath.split('/')[0]
-                    : 'Fichiers';
+            // Mise à jour de l'affichage
+            if (allSelectedFiles.length === 0) {
+                fileList.innerHTML = '<p>Aucun fichier sélectionné.</p>';
+                fileList.style.display = 'none';
+                sendButton.style.display = 'none';
+            } else {
+                // Grouper les fichiers par dossier
+                const filesByFolder = new Map();
+                allSelectedFiles.forEach(file => {
+                    // Détermine le nom du dossier (soit depuis webkitRelativePath, soit depuis notre contexte)
+                    const folderName = file.webkitRelativePath
+                        ? file.webkitRelativePath.split('/')[0]
+                        : 'Fichiers';
 
-                if (!filesByFolder.has(folderName)) {
-                    filesByFolder.set(folderName, []);
-                }
-                filesByFolder.get(folderName).push(file);
-            });
+                    if (!filesByFolder.has(folderName)) {
+                        filesByFolder.set(folderName, []);
+                    }
+                    filesByFolder.get(folderName).push(file);
+                });
 
-            // Créer l'HTML avec les fichiers groupés par dossier
-            const foldersHtml = Array.from(filesByFolder.entries()).map(([folder, files]) => `
+                // Créer l'HTML avec les fichiers groupés par dossier
+                const foldersHtml = Array.from(filesByFolder.entries()).map(([folder, files]) => `
             <div class="folder-group">
                 <h4>📁 ${folder}</h4>
                 <ul>
@@ -1115,30 +1405,30 @@ $region = $parentFolder;
             </div>
             `).join('');
 
-            fileList.innerHTML = foldersHtml;
-            fileList.style.display = 'block';
-            sendButton.style.display = 'block';
-            sendButton.disabled = false;
+                fileList.innerHTML = foldersHtml;
+                fileList.style.display = 'block';
+                sendButton.style.display = 'block';
+                sendButton.disabled = false;
 
-            // Ajouter les gestionnaires d'événements pour les boutons de suppression
-            document.querySelectorAll('.remove-file').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const fileName = e.target.dataset.fileName;
-                    const folder = e.target.dataset.folder;
+                // Ajouter les gestionnaires d'événements pour les boutons de suppression
+                document.querySelectorAll('.remove-file').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const fileName = e.target.dataset.fileName;
+                        const folder = e.target.dataset.folder;
 
-                    // Supprimer le fichier de allSelectedFiles
-                    allSelectedFiles = allSelectedFiles.filter(file => {
-                        const fileFolder = file.webkitRelativePath
-                            ? file.webkitRelativePath.split('/')[0]
-                            : 'Fichiers';
-                        return !(file.name === fileName && fileFolder === folder);
+                        // Supprimer le fichier de allSelectedFiles
+                        allSelectedFiles = allSelectedFiles.filter(file => {
+                            const fileFolder = file.webkitRelativePath
+                                ? file.webkitRelativePath.split('/')[0]
+                                : 'Fichiers';
+                            return !(file.name === fileName && fileFolder === folder);
+                        });
+
+                        // Mettre à jour l'affichage
+                        displayFiles([]);  // Passer un tableau vide car on a déjà mis à jour allSelectedFiles
                     });
-
-                    // Mettre à jour l'affichage
-                    displayFiles([]);  // Passer un tableau vide car on a déjà mis à jour allSelectedFiles
                 });
-            });
-        }
+            }
         };
 
         // Fonction pour réinitialiser la sélection
@@ -1163,33 +1453,33 @@ $region = $parentFolder;
 
         // Function pour lire récursivement le contenu des dossiers
         const readEntryContent = async (entry) => {
-        if (!entry.isDirectory) {
-            return new Promise((resolve, reject) => {
-            entry.file(file => resolve([file]), reject);
-            });
-        }
+            if (!entry.isDirectory) {
+                return new Promise((resolve, reject) => {
+                    entry.file(file => resolve([file]), reject);
+                });
+            }
 
-        const dirReader = entry.createReader();
-        const files = [];
+            const dirReader = entry.createReader();
+            const files = [];
 
-        const readEntries = () => {
-            return new Promise((resolve, reject) => {
-            dirReader.readEntries(async entries => {
-                if (!entries.length) {
-                resolve();
-                } else {
-                const entryFiles = await Promise.all(
-                    entries.map(entry => readEntryContent(entry))
-                );
-                files.push(...entryFiles.flat());
-                readEntries().then(resolve);
-                }
-            }, reject);
-            });
-        };
+            const readEntries = () => {
+                return new Promise((resolve, reject) => {
+                    dirReader.readEntries(async entries => {
+                        if (!entries.length) {
+                            resolve();
+                        } else {
+                            const entryFiles = await Promise.all(
+                                entries.map(entry => readEntryContent(entry))
+                            );
+                            files.push(...entryFiles.flat());
+                            readEntries().then(resolve);
+                        }
+                    }, reject);
+                });
+            };
 
-        await readEntries();
-        return files;
+            await readEntries();
+            return files;
         };
 
 
@@ -1288,8 +1578,8 @@ $region = $parentFolder;
             for (const item of items) {
                 if (item.kind === 'file') {
                     const entry = item.webkitGetAsEntry?.() ||
-                                 item.getAsEntry?.() ||
-                                 item.mozGetAsEntry?.();
+                        item.getAsEntry?.() ||
+                        item.mozGetAsEntry?.();
 
                     if (entry) {
                         if (entry.isDirectory) {
@@ -1397,8 +1687,8 @@ $region = $parentFolder;
                     displayFiles([]);
                     sendButton.disabled = false;
 
-                    setTimeout(function(){
-                       window.location.reload();
+                    setTimeout(function () {
+                        window.location.reload();
                     }, 2500);
                 } else {
                     throw new Error(data.message || 'Erreur lors du téléchargement');
@@ -1452,7 +1742,7 @@ $region = $parentFolder;
         };
 
         // Gestion de la suppression
-        document.addEventListener('click', function(e) {
+        document.addEventListener('click', function (e) {
             if (e.target.classList.contains('delete-btn')) {
                 if (!confirm('Êtes-vous sûr de vouloir déplacer cet élément dans la corbeille ?')) {
                     return;
@@ -1470,51 +1760,50 @@ $region = $parentFolder;
                     },
                     body: `path=${path}&type=${type}`
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Animation de suppression
-                        row.style.transition = 'opacity 0.3s';
-                        row.style.opacity = '0';
-                        setTimeout(() => {
-                            row.remove();
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Animation de suppression
+                            row.style.transition = 'opacity 0.3s';
+                            row.style.opacity = '0';
+                            setTimeout(() => {
+                                row.remove();
 
-                            // Si c'est dans les résultats de recherche et qu'il n'y a plus de résultats
-                            if (isInSearchResults) {
-                                const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
-                                if (searchResultsTable.children.length === 0) {
-                                    searchResultsTable.innerHTML = '<tr><td colspan="4">Aucun résultat trouvé</td></tr>';
+                                // Si c'est dans les résultats de recherche et qu'il n'y a plus de résultats
+                                if (isInSearchResults) {
+                                    const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
+                                    if (searchResultsTable.children.length === 0) {
+                                        searchResultsTable.innerHTML = '<tr><td colspan="4">Aucun résultat trouvé</td></tr>';
+                                    }
                                 }
+
+                                showNotification('Élément déplacé dans la corbeille', 'success');
+                            }, 300);
+
+                            // Si c'est un dossier, on retire aussi tous les fichiers liés dans les résultats de recherche
+                            if (type === 'dir') {
+                                const pathToMatch = path + '/';
+                                const allRows = document.querySelectorAll('#searchResultsTable tr, #fileTable tr');
+                                allRows.forEach(row => {
+                                    const deleteBtn = row.querySelector('.delete-btn');
+                                    if (deleteBtn && deleteBtn.dataset.path.startsWith(pathToMatch)) {
+                                        row.style.transition = 'opacity 0.3s';
+                                        row.style.opacity = '0';
+                                        setTimeout(() => row.remove(), 300);
+                                    }
+                                });
                             }
-
-                            showNotification('Élément déplacé dans la corbeille', 'success');
-                        }, 300);
-
-                        // Si c'est un dossier, on retire aussi tous les fichiers liés dans les résultats de recherche
-                        if (type === 'dir') {
-                            const pathToMatch = path + '/';
-                            const allRows = document.querySelectorAll('#searchResultsTable tr, #fileTable tr');
-                            allRows.forEach(row => {
-                                const deleteBtn = row.querySelector('.delete-btn');
-                                if (deleteBtn && deleteBtn.dataset.path.startsWith(pathToMatch)) {
-                                    row.style.transition = 'opacity 0.3s';
-                                    row.style.opacity = '0';
-                                    setTimeout(() => row.remove(), 300);
-                                }
-                            });
+                        } else {
+                            showNotification(data.message || 'Erreur lors de la suppression', 'error');
                         }
-                    } else {
-                        showNotification(data.message || 'Erreur lors de la suppression', 'error');
-                    }
-                })
-                .catch(error => {
-                    showNotification('Erreur lors de la suppression', 'error');
-                    console.error('Error:', error);
-                });
+                    })
+                    .catch(error => {
+                        showNotification('Erreur lors de la suppression', 'error');
+                        console.error('Error:', error);
+                    });
             }
         });
     </script>
-
 </body>
 
 <?php
