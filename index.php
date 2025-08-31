@@ -864,15 +864,19 @@ $region = $parentFolder;
         <?php
         if (config('hostname') === 'audits.drop.tf') {
             ?>
+            <!--
             <h5 class="warningHost">Vous êtes sur le miroir audits.drop.tf. Les dépôts sont décalés d'une minute mais les
                 recherches sont rapides grâce à un <strong>SSD</strong>. La version officielle du dépôt disponible en cliquant
                 ici : <a href="https://audits.emmaus-connect.org/<?php echo $region; ?>">audits.emmaus-connect.org</a>.</h5>
+            -->
             <?php
         } else {
             ?>
+            <!--
             <h5 class="warningHost">Vous êtes sur audits.emmaus-connect.org. Les dépôts sont instantanés ici mais les recherches
                 sont lentes dû au <strong>HDD</strong>. Vous pouvez aller sur le miroir <a
                     href="https://audits.drop.tf/<?php echo $region; ?>">audits.drop.tf</a> pour une recherche plus rapide.</h5>
+            -->
             <?php
         }
         ?>
@@ -909,8 +913,12 @@ $region = $parentFolder;
                 <input type="file" id="file-input" accept=".html" multiple style="display: none">
 
                 <!-- Input caché pour les dossiers -->
-                <input type="file" id="folder-input" webkitdirectory style="display: none">
+                <input type="file" id="folder-input" webkitdirectory multiple style="display: none">
             </div>
+        </div>
+
+        <div style="margin-top: 10px; margin-bottom: 15px; font-size: 13px; color: var(--text-color-alt); font-style: italic;">
+            <strong><span style="font-style: normal;">💡 Astuce :</span></strong> Le glisser-déposer est la méthode recommandée pour télécharger plusieurs dossiers simultanément. La sélection manuelle (en cliquant sur "<span class="clickable">dossiers</span>" en surbrillance bleu, ne permet d'ajouter qu'un seul dossier à la fois.
         </div>
 
         <div id="file-list">
