@@ -21,16 +21,14 @@
             "template":[
                 "/ventoy/scripts/win_unattended_installfromusb.xml",
                 "/ventoy/scripts/win_unattended.xml"
-            ],
-            "autosel": 1
+            ]
         },
         {
             "image": "/ISO/Windows_11.iso",
             "template":[
                 "/ventoy/scripts/win_unattended_installfromusb.xml",
 				"/ventoy/scripts/win_unattended.xml"
-            ],
-            "autosel": 1
+            ]
         }
     ]
 }

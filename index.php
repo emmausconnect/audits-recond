@@ -81,7 +81,7 @@ $region = $parentFolder;
             --line-height: 1.20rem;
             --font-size: 15px;
             /* Loading overlay variables */
-            --overlay-background: rgba(255, 255, 255, 0.85);
+            --overlay-background: rgba(255, 255, 255, 0.65);
             --spinner-base-color: #f3f3f3;
             --spinner-accent-color: #3498db;
 
@@ -107,7 +107,7 @@ $region = $parentFolder;
                 --audit-count-color: #a4a4a4;
                 --format-file-span: #f00;
                 /* Loading overlay dark mode variables */
-                --overlay-background: rgba(0, 0, 0, 0.85);
+                --overlay-background: rgba(0, 0, 0, 0.65);
                 --spinner-base-color: #555;
                 --spinner-accent-color: #64b5f6;
             }
@@ -974,6 +974,12 @@ $region = $parentFolder;
             <table class='search-file'>
                 <input type="text" id="searchBox" minlength="3" placeholder="Recherche (imei, processeur, ram, stockage, marque, bénévole... • min. 3 caractères)"
                     title="Veuillez saisir au moins 3 caractères" style="width: 100%; padding: 8px;">
+                <div style="margin-top: 8px;">
+                    <label>
+                        <input type="checkbox" id="searchFilenamesOnly" style="cursor: pointer;" checked>
+                        <span style="cursor: pointer;">Rechercher uniquement dans les noms de fichiers/dossiers</span>
+                    </label>
+                </div>
             </table>
             <span>/</span>
             <?php
@@ -1008,96 +1014,144 @@ $region = $parentFolder;
 
     <script>
         let searchTimeout;
-        let parentFolder = '<?php echo $parentFolder; ?> ';
-        // Make sure these elements exist in your HTML
+        let searchController;
+        let isSearching = false; // Add flag to track if search is in progress
+        let parentFolder = '<?php echo $parentFolder; ?>';
         const loadingOverlay = document.getElementById('loading-overlay');
         const loadingMessage = document.getElementById('loading-message');
-
-        document.getElementById('searchBox').addEventListener('input', function (e) {
-            clearTimeout(searchTimeout);
-            const searchTerm = e.target.value.trim();
+        
+        function performSearch(searchTerm) {
+            // Don't start a new search if one is already running
+            if (isSearching) {
+                return;
+            }
+            
+            isSearching = true; // Set flag
+            
             const fileTable = document.getElementById('fileTable');
             const searchResults = document.getElementById('searchResults');
             const isLogged = '<?php echo $isLogged; ?>';
             const isSubsubdir = '<?php echo $isSubsubdir; ?>';
             const isCorbeille = '<?php echo $isCorbeille; ?>';
-
-            if (searchTerm.length >= 3) {
-                searchTimeout = setTimeout(() => {
-                    loadingMessage.textContent = 'Recherche des fichiers correspondants...';
-                    loadingOverlay.style.display = 'flex';
-
-                    fetch(`search.php?term=${encodeURIComponent(searchTerm)}`)
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error('La réponse du réseau n\'était pas bonne');
-                            }
-                            return response.json();
-                        })
-                        .then(results => {
-                            const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
-                            searchResultsTable.innerHTML = '';
-
-                            if (results.length > 0) {
-                                fileTable.style.display = 'none';
-                                searchResults.style.display = 'block';
-                                resultCount.textContent = `(${results.length} résultat${results.length > 1 ? 's' : ''})`;
-
-                                results.forEach(file => {
-                                    const row = document.createElement('tr');
-
-                                    if (file.isDir) {
-                                        row.innerHTML = `
-                                    <td class='dl-cell'><a class='download-link' title='Télécharger le dossier' href="/zip.php?path=./${parentFolder}/${file.path}" download>⬇️</a></td>
-                                    <td class='file-cell'>
-                                    ${isLogged && !isSubsubdir ? `<span class='delete-btn' data-path='${file.path}' data-type='dir'>❌</span>` : ''}
-                                    <span class='icon'>📁</span>
-                                    <a class='folder-link file-or-folder-link' href="?path=${encodeURIComponent(file.path)}">${file.name}</a>
-                                    </td>
-                                    <td class='type-cell'>${file.type}</td>
-                                    <td class='date-cell'>${formatDate(file.timestamp)}</td>
-                                    <td style='display: none;' data-timestamp="${file.timestamp}">${file.timestamp}</td>
-                                `;
-                                    } else {
-                                        row.innerHTML = `
-                                    <td class='dl-cell'><a class='download-link' title='Télécharger' href="${file.path}" download>⬇️</a></td>
-                                    <td class='file-cell'>
-                                    ${isLogged && !isSubsubdir ? `<span class='delete-btn' data-path='${file.path}' data-type='file'>❌</span>` : ''}
-                                    <span class='icon'>📄</span>
-                                    <a class='file-link file-or-folder-link' href="${file.path}" target="_blank">${file.name}</a>
-                                    </td>
-                                    <td class='type-cell'>${file.type}</td>
-                                    <td class='date-cell'>${formatDate(file.timestamp)}</td>
-                                    <td style='display: none;' data-timestamp="${file.timestamp}">${file.timestamp}</td>
-                                `;
-                                    }
-                                    searchResultsTable.appendChild(row);
-                                });
+            const searchMode = document.getElementById('searchFilenamesOnly').checked ? 'filenames' : 'all';
+            
+            // Create new AbortController for this request
+            searchController = new AbortController();
+            
+            loadingMessage.innerHTML = 'Recherche des fichiers correspondants...<br><small style="font-size: 0.85em; font-weight: normal; opacity: 0.8;">La première recherche peut prendre du temps, les suivantes seront plus rapides.</small>';
+            loadingOverlay.style.display = 'flex';
+            
+            fetch(`search.php?term=${encodeURIComponent(searchTerm)}&mode=${searchMode}`, {
+                signal: searchController.signal
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('La réponse du réseau n\'était pas bonne');
+                    }
+                    return response.json();
+                })
+                .then(results => {
+                    const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
+                    searchResultsTable.innerHTML = '';
+                    if (results.length > 0) {
+                        fileTable.style.display = 'none';
+                        searchResults.style.display = 'block';
+                        resultCount.textContent = `(${results.length} résultat${results.length > 1 ? 's' : ''})`;
+                        results.forEach(file => {
+                            const row = document.createElement('tr');
+                            if (file.isDir) {
+                                row.innerHTML = `
+                            <td class='dl-cell'><a class='download-link' title='Télécharger le dossier' href="/zip.php?path=./${parentFolder}/${file.path}" download>⬇️</a></td>
+                            <td class='file-cell'>
+                            ${isLogged && !isSubsubdir ? `<span class='delete-btn' data-path='${file.path}' data-type='dir'>❌</span>` : ''}
+                            <span class='icon'>📁</span>
+                            <a class='folder-link file-or-folder-link' href="?path=${encodeURIComponent(file.path)}">${file.name}</a>
+                            </td>
+                            <td class='type-cell'>${file.type}</td>
+                            <td class='date-cell'>${formatDate(file.timestamp)}</td>
+                            <td style='display: none;' data-timestamp="${file.timestamp}">${file.timestamp}</td>
+                        `;
                             } else {
-                                searchResultsTable.innerHTML = '<tr><td colspan="4">Aucun résultat trouvé</td></tr>';
-                                searchResults.style.display = 'block';
-                                fileTable.style.display = 'none';
-                                resultCount.textContent = '(0 résultat)';
+                                row.innerHTML = `
+                            <td class='dl-cell'><a class='download-link' title='Télécharger' href="${file.path}" download>⬇️</a></td>
+                            <td class='file-cell'>
+                            ${isLogged && !isSubsubdir ? `<span class='delete-btn' data-path='${file.path}' data-type='file'>❌</span>` : ''}
+                            <span class='icon'>📄</span>
+                            <a class='file-link file-or-folder-link' href="${file.path}" target="_blank">${file.name}</a>
+                            </td>
+                            <td class='type-cell'>${file.type}</td>
+                            <td class='date-cell'>${formatDate(file.timestamp)}</td>
+                            <td style='display: none;' data-timestamp="${file.timestamp}">${file.timestamp}</td>
+                        `;
                             }
-                        })
-                        .catch(error => {
-                            console.error('Erreur de recherche:', error);
-                            const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
-                            searchResultsTable.innerHTML = '<tr><td colspan="4">Une erreur est survenue lors de la recherche.</td></tr>';
-                            fileTable.style.display = 'none';
-                            searchResults.style.display = 'block';
-                            resultCount.textContent = '';
-                        })
-                        .finally(() => {
-                            loadingOverlay.style.display = 'none';
+                            searchResultsTable.appendChild(row);
                         });
-                }, 300);
+                    } else {
+                        searchResultsTable.innerHTML = '<tr><td colspan="4">Aucun résultat trouvé</td></tr>';
+                        searchResults.style.display = 'block';
+                        fileTable.style.display = 'none';
+                        resultCount.textContent = '(0 résultat)';
+                    }
+                })
+                .catch(error => {
+                    // Don't show error if request was aborted (user kept typing)
+                    if (error.name === 'AbortError') {
+                        console.log('Search cancelled - user is still typing');
+                        return;
+                    }
+                    console.error('Erreur de recherche:', error);
+                    const searchResultsTable = document.getElementById('searchResultsTable').getElementsByTagName('tbody')[0];
+                    searchResultsTable.innerHTML = '<tr><td colspan="4">Une erreur est survenue lors de la recherche.</td></tr>';
+                    fileTable.style.display = 'none';
+                    searchResults.style.display = 'block';
+                    resultCount.textContent = '';
+                })
+                .finally(() => {
+                    loadingOverlay.style.display = 'none';
+                    searchController = null;
+                    isSearching = false; // Reset flag when search completes
+                });
+        }
+        
+        document.getElementById('searchBox').addEventListener('input', function (e) {
+            // Cancel previous timeout
+            clearTimeout(searchTimeout);
+            
+            // Abort previous fetch request immediately when user types
+            if (searchController) {
+                searchController.abort();
+                loadingOverlay.style.display = 'none';
+                isSearching = false; // Reset flag when aborting
+            }
+            
+            const searchTerm = e.target.value.trim();
+            const fileTable = document.getElementById('fileTable');
+            const searchResults = document.getElementById('searchResults');
+            
+            if (searchTerm.length >= 3) {
+                // Use longer delay for automatic search (1 second)
+                searchTimeout = setTimeout(() => {
+                    performSearch(searchTerm);
+                }, 1000);
             } else {
                 searchResults.style.display = 'none';
                 fileTable.style.display = 'table';
             }
         });
-
+        
+        // Add keypress event for instant search on Enter
+        document.getElementById('searchBox').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Prevent form submission if inside a form
+                const searchTerm = e.target.value.trim();
+                if (searchTerm.length >= 3) {
+                    // Cancel the timeout and search immediately
+                    clearTimeout(searchTimeout);
+                    performSearch(searchTerm);
+                }
+            }
+        });
+        
         function formatDate(timestamp) {
             const months = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
             const date = new Date(timestamp * 1000);
@@ -1106,7 +1160,6 @@ $region = $parentFolder;
             const year = date.getFullYear();
             const hours = String(date.getHours()).padStart(2, '0');
             const minutes = String(date.getMinutes()).padStart(2, '0');
-
             return `${day} ${month} ${year} à ${hours}:${minutes}`;
         }
     </script>
@@ -1136,6 +1189,30 @@ $region = $parentFolder;
             }
 
             $items = scandir($path);
+            
+            // Sort items with custom logic
+            usort($items, function($a, $b) use ($path) {
+                $a_path = "$path/$a";
+                $b_path = "$path/$b";
+                $a_is_dir = is_dir($a_path);
+                $b_is_dir = is_dir($b_path);
+                
+                // Check if items are the special directories
+                $a_is_special = $a_is_dir && ($a === "TEST" || $a === "_Région inconnue");
+                $b_is_special = $b_is_dir && ($b === "TEST" || $b === "_Région inconnue");
+                
+                // If both are special directories, maintain their relative order
+                if ($a_is_special && $b_is_special) {
+                    return 0;
+                }
+                
+                // Special directories go to the end
+                if ($a_is_special) return 1;
+                if ($b_is_special) return -1;
+                
+                // Normal sorting for other items (you can adjust this as needed)
+                return strcasecmp($a, $b);
+            });
 
             foreach ($items as $file) {
 
@@ -1143,7 +1220,7 @@ $region = $parentFolder;
                     continue;
                 }
 
-                $item_path = $path . "/" . $file;
+                $item_path = "$path/$file";
 
                 $is_dir = is_dir($item_path);
                 $icon = get_icon($is_dir ? "dir" : "file");
@@ -1152,6 +1229,19 @@ $region = $parentFolder;
                 $type = getFileType($fileName, $is_dir);
 
                 $timestamp = filemtime($item_path);
+                
+                // Ugly fix for wrong timestamp inside folders (use parent's timestamp instead)
+                // Side effect : won't apply to childrens folder if there's any. 
+                // Should find topmost folder according to current region dir if we want to fix against folder inside folder.
+                if (!$isCorbeille && $isSubsubdir) {
+                    $timestamp = filemtime(dirname($item_path)); 
+                }
+                // If we're in trash and direct parent isn't named CORBEILLE > apply fix too
+                // Should apply to all childrens folder inside trash if there's any BUT since parent's don't have the right timestamp it triggers the same bug anyway.
+                // Fix should be to find topmost folder (after) CORBEILLE. 
+                else if ($isCorbeille && (basename(dirname($item_path)) !== "CORBEILLE")) {
+                    $timestamp = filemtime(dirname($item_path));
+                }
 
                 echo "<tr class='table-row-link'>";
 
@@ -1819,7 +1909,7 @@ $region = $parentFolder;
 echo '<table id="headerTable" style="margin-bottom:15px">';
 echo '<tr class="footer">';
 echo '<td class="" style="width:1px;white-space: pre;">Crédits</td>';
-echo '<td class="" style="white-space: pre;"><i><a href="//schroed.fr" target="blank_">Joffrey SCHROEDER</a> • Jean-Jacques FOUGÈRE</i></td>';
+echo '<td class="" style="white-space: pre;"><i><a href="//schroed.fr" target="blank_">Joffrey SCHROEDER</a> • Jean-Jacques FOUGÈRE • Bernard MAISON</i></td>';
 echo '<td class="" style="width:1px;white-space: pre;"><a href="//github.com/emmausconnect/audits-recond" target="_blank">Version ' . config('version') . '</a></td>';
 echo '<td class="" style="width:1px;white-space: pre;"><a href="//' . config('hostname') . '/api/apps/web" target="_blank">Applications</a></td>';
 echo '<td class="" style="width:1px;white-space: pre;"><a href="//' . config('hostname') . '/api" target="_blank">API</a></td>';

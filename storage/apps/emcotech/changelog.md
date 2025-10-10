@@ -1,3 +1,106 @@
+🍉 v2.4.4 🍉 | 02/10/25
+
+———— Général ————
+
++ Ajout d'un raccourcis vers le panneau de désinstallation d'app
+  au menu clic-droit d'EmCoTech.
+
+———— Audits PC ————
+
++ Corrige plusieurs problèmes avec mon implémentation du Jean-Jacques.
+
+🍉 v2.4.3 🍉 | 30/09/25
+
+———— Audits PC ————
+
++ Le dossier "Découverte Mon PC" est mis sur le bureau à la fin de l'initialisation.
+  Un racourcis vers le fichier "Découverte de mon PC.pdf"
+  ainsi que "LE CONTRÔLE PARENTAL.pdf" est également déposé sur le bureau.
+
++ Retire la lecture des températures via la librairie d'OpenHardwareMonitor,
+  qui utilise le driver WinRing0 qui est maintenant flaggé par
+  Microsoft.
+
+  Il n'y a pas de workaround, tous les logiciels de monitoring sont impactés.
+  L'interêt de la température étant limité, j'ai donc décidé de retirer
+  la feature pour le moment.
+
+  Exemple: https://github.com/openhardwaremonitor/openhardwaremonitor/issues/1557
+
++ Hotfix d'un bug d'interface dans la section Audit PC pour les PC n'ayant
+  pas de batterie interne (PC Fixe par exemple).
+
++ Tentative de correction du GUI pendant le test batterie vidéo qui se mettait trop
+  en bas à droite et sortait de l'écran.
+
+🍉 v2.4.2 🍉 | 29/09/25
+
+———— Cosmétique ————
+
++ Rollback de l'icône dans les titres des onglets car cela
+  posait un problème de hauteur de la fenêtre sur certains
+  PC.
+
+———— Audits PC ————
+
++ Lien vers le Jean-Jacques 4.8.3
+
+🍉 v2.4.1 🍉 | 19/09/25
+
+———— Audits PC ————
+
++ Test Batterie PC :
+  - Correction d'un bug qui ne détectait pas correctement si
+    la batterie était en charge ou non et empêchait donc
+    de démarrer le test.
+  - Optimisation de la consommation CPU durant le test.
+    (90 % d'utilisation en moins).
+  - Remet la fenêtre principal d'EmCoTech en avant plan
+    à la fermeture du test de batterie.
+  - La fenêtre de test est placée en bas à droite.
+
+🍉 v2.4.0 🍉 | 04/09/25
+
+———— Cosmétique ————
+
++ Ajout d'image d'un Laptop et d'un Téléphone dans la fenêtre
+  d'identification de l'appareil lors du démarrage de l'audit.
+
++ Ajout d'icônes dans le titre des onglets.
+
+———— Audits PC ————
+
++ Sous l'onglet Audit PC, affiche le pourcentage résiduelle de la batterie
+  étant retournée par Windows. Affiche aussi l'identifiant de la batterie.
+
++ [BETA / INSTABLE ] Test complet et interactif de la batterie pour les PC portables ajoutés.
+  - La vidéo YouTube 30 minutes timer est ouverte automatiquement.
+  - Le test dure 30 minutes et affiche la perte de batterie en mWh et en %.
+  - Affiche une estimation de l'autonomie restante à 0% basée sur la perte
+    durant le test.
+  - Affiche une estimation de l'autonomie totale 100% → 0% basée sur la perte
+    durant le test.
+
+———— Inititalisation PC ————
+
++ Ajout sur le tooltip (i) de Firefox, l'information que l'IA est désactivé.
+
+🍉 v2.3.2 🍉 | 01/09/25
+
+———— Audits PC ————
+
++ Ajout d'un bouton pour ouvrir la page YouTube 30 minutes timer pour
+  le test batterie.
+
++ (BETA) Ajout du % résiduelle de la batterie sous ce nouveau bouton,
+  ainsi que le nom de la batterie si elle est détectée.
+
+———— Audits Tablette ————
+
++ Si la tablette ne supporte pas de réseau cellulaire et n'a pas d'IMEI,
+  Il y aura écrit "NO SIM" après le numéro de série
+  sur les grandes minifiches.
+
 🍉 v2.3.0 🍉 | 17/08/25
 
 ———— Inititalisation PC ————

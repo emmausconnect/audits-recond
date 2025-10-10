@@ -210,12 +210,14 @@ foreach ($routes[$request_method] ?? [] as $pattern => $route) {
                         );
                     }
                 } else {
-                    // Pour les requêtes non authentifiées
-                    logApiUsage(
-                        null,
-                        $base_path . $request_uri,
-                        $request_method
-                    );
+                    if ($request_method !== "GET") {
+                        // Log only non GET request
+                        logApiUsage(
+                            null,
+                            $base_path . $request_uri,
+                            $request_method
+                        );
+                    }
                 }
                 // Passer l'entité authentifiée à la fonction de gestion
                 array_unshift($matches, $authenticatedEntity);
@@ -225,7 +227,10 @@ foreach ($routes[$request_method] ?? [] as $pattern => $route) {
             }
         } else {
             // Route publique, pas de vérification d'authentification
-            logApiUsage(null, $base_path . $request_uri, $request_method);
+            if ($request_method !== "GET") {
+                // Log only non GET request
+                logApiUsage(null, $base_path . $request_uri, $request_method);
+            }
             call_user_func_array($handler, $matches);
         }
         break;
@@ -449,6 +454,11 @@ function uploadZip($user)
 {
     // Vérification que les données nécessaires sont présentes
     if (!isset($_POST["ecid"]) || !isset($_FILES["actual_file"])) {
+        logApiUsage($user, '/upload/zip', 'POST', [
+            'function' => 'uploadZip',
+            'status' => 'ERROR',
+            'error' => 'Données manquantes'
+        ]);
         sendResponse(400, ["error" => true, "message" => "Données manquantes"]);
     }
 
@@ -498,6 +508,25 @@ function uploadZip($user)
                 $zip->extractTo($ecid_dir);
                 $zip->close();
                 unlink($destination);
+                
+                $iterator = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($ecid_dir, RecursiveDirectoryIterator::SKIP_DOTS)
+                );
+                foreach ($iterator as $file) {
+                    if ($file->isFile()) {
+                        touch($file->getRealPath()); // Sets last modified to current time
+                    }
+                }
+                
+                // Log successful upload
+                logApiUsage($user, '/upload/zip', 'POST', [
+                    'function' => 'uploadZip',
+                    'filename' => $filename,
+                    'status' => 'SUCCESS',
+                    'ecid' => $ecid,
+                    'region' => $region
+                ]);
+                
                 sendResponse(200, [
                     "message" => "Fichier ZIP reçu et décompressé avec succès",
                     "url" =>
@@ -512,18 +541,46 @@ function uploadZip($user)
                     "ecid" => $ecid,
                 ]);
             } else {
+                // Log ZIP extraction error
+                logApiUsage($user, '/upload/zip', 'POST', [
+                    'function' => 'uploadZip',
+                    'filename' => $filename,
+                    'status' => 'ERROR',
+                    'error' => 'Erreur ouverture ZIP',
+                    'ecid' => $ecid
+                ]);
+                
                 sendResponse(500, [
                     "error" => true,
                     "message" => "Erreur lors de l'ouverture du fichier zip",
                 ]);
             }
         } else {
+            // Log file move error
+            logApiUsage($user, '/upload/zip', 'POST', [
+                'function' => 'uploadZip',
+                'filename' => $filename,
+                'status' => 'ERROR',
+                'error' => 'Échec déplacement fichier',
+                'ecid' => $ecid
+            ]);
+            
             sendResponse(500, [
                 "error" => true,
                 "message" => "Échec du déplacement du fichier",
             ]);
         }
     } else {
+        // Log upload error
+        logApiUsage($user, '/upload/zip', 'POST', [
+            'function' => 'uploadZip',
+            'filename' => $_FILES["actual_file"]["name"] ?? 'unknown',
+            'status' => 'ERROR',
+            'error' => 'Erreur téléchargement',
+            'upload_error_code' => $_FILES["actual_file"]["error"],
+            'ecid' => $ecid
+        ]);
+        
         sendResponse(400, [
             "error" => true,
             "message" => "Erreur lors du téléchargement du fichier",
@@ -531,10 +588,15 @@ function uploadZip($user)
     }
 }
 
-function uploadAudit()
+function uploadAudit($user = null) // Added user parameter
 {
     // Vérification que les données nécessaires sont présentes
     if (!isset($_POST["region"]) || !isset($_FILES["actual_file"])) {
+        logApiUsage($user, '/upload/audit', 'POST', [
+            'function' => 'uploadAudit',
+            'status' => 'ERROR',
+            'error' => 'Données manquantes'
+        ]);
         sendResponse(400, ["error" => true, "message" => "Données manquantes"]);
     }
 
@@ -578,6 +640,14 @@ function uploadAudit()
 
         // Déplacer le nouveau fichier téléchargé
         if (move_uploaded_file($uploaded_file, $final_file_path)) {
+            // Log successful upload
+            logApiUsage($user, '/upload/audit', 'POST', [
+                'function' => 'uploadAudit',
+                'filename' => $filename,
+                'status' => 'SUCCESS',
+                'region' => $region
+            ]);
+            
             sendResponse(200, [
                 "message" => "Fichier audit reçu avec succès",
                 "url" =>
@@ -591,6 +661,16 @@ function uploadAudit()
                 "file" => $filename,
             ]);
         } else {
+            // Log file move error
+            logApiUsage($user, '/upload/audit', 'POST', [
+                'function' => 'uploadAudit',
+                'filename' => $filename,
+                'status' => 'ERROR',
+                'error' => 'Échec déplacement fichier',
+                'region' => $region,
+                'upload_error_code' => $_FILES["actual_file"]["error"]
+            ]);
+            
             sendResponse(500, [
                 "error" => true,
                 "message" => "Échec du déplacement du fichier",
@@ -598,6 +678,16 @@ function uploadAudit()
             ]);
         }
     } else {
+        // Log upload error
+        logApiUsage($user, '/upload/audit', 'POST', [
+            'function' => 'uploadAudit',
+            'filename' => $_FILES["actual_file"]["name"] ?? 'unknown',
+            'status' => 'ERROR',
+            'error' => 'Erreur téléchargement',
+            'region' => $_POST["region"] ?? 'unknown',
+            'upload_error_code' => $_FILES["actual_file"]["error"]
+        ]);
+        
         sendResponse(400, [
             "error" => true,
             "message" => "Erreur lors du téléchargement du fichier",
@@ -1505,7 +1595,27 @@ function downloadLatestAppVersion($appId)
     header("Cache-Control: no-cache, must-revalidate");
     header("Pragma: no-cache");
 
-    readfile($latestVersionFile);
+    $handle = fopen($latestVersionFile, 'rb');
+    if ($handle === false) {
+        sendResponse(500, [
+            "error" => true,
+            "message" => "Impossible d'ouvrir le fichier",
+        ]);
+        return;
+    }
+    
+    // Disable output buffering for large files
+    if (ob_get_level()) {
+        ob_end_clean();
+    }
+    
+    // Stream file in 8MB chunks
+    while (!feof($handle)) {
+        echo fread($handle, 8 * 1024 * 1024); // 8MB chunks
+        flush(); // Force send to client
+    }
+    
+    fclose($handle);
     exit();
 }
 
@@ -1565,7 +1675,27 @@ function downloadSpecificAppVersion($appId, $version)
     header("Cache-Control: no-cache, must-revalidate");
     header("Pragma: no-cache");
 
-    readfile($versionFile);
+    $handle = fopen($versionFile, 'rb');
+    if ($handle === false) {
+        sendResponse(500, [
+            "error" => true,
+            "message" => "Impossible d'ouvrir le fichier",
+        ]);
+        return;
+    }
+    
+    // Disable output buffering for large files
+    if (ob_get_level()) {
+        ob_end_clean();
+    }
+    
+    // Stream file in 8MB chunks
+    while (!feof($handle)) {
+        echo fread($handle, 8 * 1024 * 1024); // 8MB chunks
+        flush(); // Force send to client
+    }
+    
+    fclose($handle);
     exit();
 }
 
@@ -1668,7 +1798,8 @@ function getAppChangelogWeb($appId)
     }
 
     // Échapper le contenu pour l'inclure en toute sécurité dans JavaScript
-    $escapedChangelog = htmlspecialchars($changelog, ENT_QUOTES, "UTF-8");
+    // $escapedChangelog = htmlspecialchars($changelog, ENT_QUOTES, "UTF-8");
+    $escapedChangelog = json_encode($changelog, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 
     $versions_url = "https://" . config("hostname") . "/api/apps/{$appId}/web";
 
@@ -1746,7 +1877,8 @@ function getAppChangelogWeb($appId)
             });
 
             // Contenu Markdown du changelog
-            const markdownContent = `{$escapedChangelog}`;
+            // const markdownContent = `{$escapedChangelog}`;
+            const markdownContent = {$escapedChangelog};
 
             // Convertir le Markdown en HTML et l'insérer dans la page
             document.getElementById('changelog').innerHTML = marked.parse(markdownContent);
@@ -3183,21 +3315,21 @@ function hasRegionAccess($entity, $region)
     return $entity["region"] === $region;
 }
 
-function logApiUsage($entity = null, $endpoint, $request_method)
+function logApiUsage($entity = null, $endpoint, $request_method, $additional_info = [])
 {
     $logFile = config("project_root_path") . "/api/logs_txt/api_usage.log";
     $logDir = dirname($logFile);
-
+    
     // Create log directory if needed
     if (!is_dir($logDir)) {
         mkdir($logDir, 0755, true);
     }
-
+    
     // Prepare log data
     $timestamp = date("Y-m-d H:i:s");
-    $ipAddress = $_SERVER["REMOTE_ADDR"];
+    $ipAddress = $_SERVER["REMOTE_ADDR"] ?? "Unknown";
     $userAgent = $_SERVER["HTTP_USER_AGENT"] ?? "Unknown";
-
+    
     // Identify if it's a user, application, or unauthenticated request
     if ($entity === null) {
         $identifier = "ANONYMOUS";
@@ -3212,16 +3344,46 @@ function logApiUsage($entity = null, $endpoint, $request_method)
             $identifier = "APP:{$entity["name"]}";
         }
     }
-
-    // Log format: [TIMESTAMP] METHOD - IDENTIFIER - ENDPOINT - IP - USER_AGENT
-    $logEntry = "[$timestamp] $request_method - $identifier - $endpoint - $ipAddress - $userAgent\n";
-
-    // Write to log file
+    
+    // Build additional info string
+    $additionalInfoStr = "";
+    if (!empty($additional_info)) {
+        $infoParts = [];
+        if (isset($additional_info['function'])) {
+            $infoParts[] = "FUNC:{$additional_info['function']}";
+        }
+        if (isset($additional_info['filename'])) {
+            $infoParts[] = "FILE:{$additional_info['filename']}";
+        }
+        // Allow for other additional info
+        foreach ($additional_info as $key => $value) {
+            if (!in_array($key, ['function', 'filename'])) {
+                $infoParts[] = strtoupper($key) . ":{$value}";
+            }
+        }
+        if (!empty($infoParts)) {
+            $additionalInfoStr = " - " . implode(" ", $infoParts);
+        }
+    }
+    
+    // Log format: [TIMESTAMP] METHOD - IDENTIFIER - ENDPOINT - IP - USER_AGENT [- ADDITIONAL_INFO]
+    $logEntry = "[$timestamp] $request_method - $identifier - $endpoint - $ipAddress - $userAgent$additionalInfoStr\n";
+    
+    // Write to log file with immediate flush
     if (
         !isset($_SERVER["HTTP_USER_AGENT"]) ||
         $_SERVER["HTTP_USER_AGENT"] !== "swagger-validator"
     ) {
-        file_put_contents($logFile, $logEntry, FILE_APPEND);
+        // Enhanced write method with immediate flush
+        $handle = fopen($logFile, 'a');
+        if ($handle) {
+            fwrite($handle, $logEntry);
+            fflush($handle);  // Force immediate write to disk
+            fclose($handle);
+        } else {
+            // Fallback to file_put_contents with LOCK_EX
+            file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
+        }
     }
 }
 

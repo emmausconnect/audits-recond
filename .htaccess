@@ -3,18 +3,23 @@ Header always unset X-Powered-By
 Header unset X-Powered-By
 Header always unset server
 Header unset server
-
 # Désactiver l'indexation des fichiers et dossiers
 Options -Indexes
-
 # Protéger les fichiers
 <FilesMatch "^(\.htaccess|\.gitignore|config\.php|config\.ini|composer\.json|composer\.lock|composer\.php|.*\.sh)$">
     Order Allow,Deny
     Deny from all
 </FilesMatch>
-
 RewriteEngine On
 RewriteRule ^vendor/ - [F,L]
+
+# Never cache .txt and .html files
+<FilesMatch "\.(txt|html)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+    ExpiresActive Off
+</FilesMatch>
 
 # Cache fonts for 1 year
 <FilesMatch "\.(woff|woff2|ttf|otf|eot)$">

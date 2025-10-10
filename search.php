@@ -5,9 +5,14 @@ if (!isset($_GET['term']) || strlen($_GET['term']) < 2) {
     exit;
 }
 $searchTerm = $_GET['term'];
+$searchMode = isset($_GET['mode']) ? $_GET['mode'] : 'all';
 $baseDir = __DIR__;
 
-function searchFiles($directory, $searchTerm) {
+function searchFiles($directory, $searchTerm, $searchMode) {
+    
+    // Fake delay for testing
+    // sleep(5);
+    
     $results = [];
     $foundFolders = []; // Keep track of folders we've already added
     $iterator = new RecursiveIteratorIterator(
@@ -49,29 +54,56 @@ function searchFiles($directory, $searchTerm) {
         }
 
         // Handle files
-        $content = @file_get_contents($filePath);
         $parentDir = dirname($relativePath);
-        if ($content !== false && (stripos($filename, $searchTerm) !== false || stripos($content, $searchTerm) !== false)) {
-            // Add parent folder if it hasn't been added yet
-            if ($parentDir !== '.' && !isset($foundFolders[$parentDir])) {
-                $parentDirInfo = new SplFileInfo($directory . '/' . $parentDir);
+        
+        if ($searchMode === 'filenames') {
+            // Only search in filenames
+            if (stripos($filename, $searchTerm) !== false) {
+                // Add parent folder if it hasn't been added yet
+                if ($parentDir !== '.' && !isset($foundFolders[$parentDir])) {
+                    $parentDirInfo = new SplFileInfo($directory . '/' . $parentDir);
+                    $results[] = [
+                        'path' => $parentDir,
+                        'name' => basename($parentDir),
+                        'type' => 'Dossier',
+                        'timestamp' => $parentDirInfo->getMTime(),
+                        'isDir' => true
+                    ];
+                    $foundFolders[$parentDir] = true;
+                }
+                // Add the file
                 $results[] = [
-                    'path' => $parentDir,
-                    'name' => basename($parentDir),
-                    'type' => 'Dossier',
-                    'timestamp' => $parentDirInfo->getMTime(),
-                    'isDir' => true
+                    'path' => $relativePath,
+                    'name' => $filename,
+                    'type' => getFileType($filename, false),
+                    'timestamp' => $file->getMTime(),
+                    'isDir' => false
                 ];
-                $foundFolders[$parentDir] = true;
             }
-            // Add the file
-            $results[] = [
-                'path' => $relativePath,
-                'name' => $filename,
-                'type' => getFileType($filename, false),
-                'timestamp' => $file->getMTime(),
-                'isDir' => false
-            ];
+        } else {
+            $content = @file_get_contents($filePath);
+            if ($content !== false && (stripos($filename, $searchTerm) !== false || stripos($content, $searchTerm) !== false)) {
+                // Add parent folder if it hasn't been added yet
+                if ($parentDir !== '.' && !isset($foundFolders[$parentDir])) {
+                    $parentDirInfo = new SplFileInfo($directory . '/' . $parentDir);
+                    $results[] = [
+                        'path' => $parentDir,
+                        'name' => basename($parentDir),
+                        'type' => 'Dossier',
+                        'timestamp' => $parentDirInfo->getMTime(),
+                        'isDir' => true
+                    ];
+                    $foundFolders[$parentDir] = true;
+                }
+                // Add the file
+                $results[] = [
+                    'path' => $relativePath,
+                    'name' => $filename,
+                    'type' => getFileType($filename, false),
+                    'timestamp' => $file->getMTime(),
+                    'isDir' => false
+                ];
+            }
         }
     }
 
@@ -117,5 +149,5 @@ function getFileType($fileName, $is_dir) {
     }
 }
 
-$results = searchFiles($baseDir, $searchTerm);
+$results = searchFiles($baseDir, $searchTerm, $searchMode);
 echo json_encode($results);
