@@ -999,7 +999,7 @@ $region = $parentFolder;
 
         echo '<table id="headerTable">';
         echo '<tr class="table-row-link">';
-        echo '<td class="file-cell" style="border-bottom:0"><span class="icon" style="float:left">🗑️</span><a class="table-row-link" title="Voir la corbeille" href="?path=./CORBEILLE">Voir la corbeille (' . $trashCount . ')</a></td>';
+        echo '<td class="file-cell"><span class="icon" style="float:left">🗑️</span><a class="table-row-link" title="Voir la corbeille" href="?path=./CORBEILLE">Voir la corbeille (' . $trashCount . ')</a></td>';
         echo "</tr>";
         echo "</table>";
     }
