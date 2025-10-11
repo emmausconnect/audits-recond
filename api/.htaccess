@@ -1,0 +1,24 @@
+# Security
+Header always unset X-Powered-By
+Header unset X-Powered-By
+Header always unset server
+Header unset server
+
+# Activation du moteur de réécriture
+RewriteEngine On
+
+# Rediriger vers HTTPS
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Bloquer les logs 
+RewriteRule ^logs_txt/ - [F,L]
+
+# Si le fichier ou le répertoire n'existe pas, redirige vers index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Redirection vers index.php
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+
