@@ -836,6 +836,9 @@ $region = $parentFolder;
     }
     ?>
     <?php
+    if (!$isSubdir) {
+        echo '<br/><br/>';
+    }
     if ($isSubdir) {
         echo '<span class="auth-infos">';
 
@@ -984,8 +987,12 @@ $region = $parentFolder;
     }
     ?>
 
-    <br />
+    <?php
 
+    echo "<br />";
+
+    ?>
+    
     <?php
     if ($isSubdir && $path == '.') {
         // Compter le nombre d'éléments dans la corbeille
@@ -1064,7 +1071,12 @@ $region = $parentFolder;
         <p id="loading-message"></p>
     </div>
 
-    <br /><br />
+    <?php
+    
+    if ($isSubdir) {
+        echo '<br /><br />';
+    }
+    ?>
 
     <script>
         let searchTimeout;
