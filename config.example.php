@@ -1,21 +1,87 @@
 <?php
 
 return [
-    'version' => '1.3.4',
-    'debug' => false,
-    'hostname' => php_sapi_name() === 'cli' ? 'localhost' : $_SERVER['HTTP_HOST'],
-    'project_root_path' => __DIR__,
-    'db_host' => 'localhost', // Non utilisé
-    'db_user' => 'root', // Non utilisé
-    'db_password' => 'password', // Non utilisé
-    'app_name' => 'MonApplication', // Non utilisé
-    'smtp_host' => 'smtp.gmail.com',
-    'smtp_auth' => true,
-    'smtp_username' => '', // Votre email gmail
-    'smtp_password' => '', // Votre MDP Unique Généré ici :  https://myaccount.google.com/apppasswords
-    'smtp_mail_from' => '', // Votre email gmail
-    'smtp_send_to' => 'php-emcotech@drop.tf', // A quel email envoyer l'erreur
-    'smtp_port' => 587,
+    "version" => "1.6.0",
+    "debug" => false,
+    "hostname" =>
+        php_sapi_name() === "cli" ? "localhost" : $_SERVER["HTTP_HOST"],
+    "project_root_path" => __DIR__,
+    "db_host" => "localhost",
+    "db_user" => "root",
+    "db_password" => "password",
+    "app_name" => "EmCoDits",
+    "smtp_host" => "smtp.gmail.com",
+    "smtp_auth" => true,
+    'smtp_username' => "", // Votre email gmail
+    'smtp_password' => "", // Votre MDP Unique Généré ici :  https://myaccount.google.com/apppasswords
+    'smtp_mail_from' => "", // Votre email gmail
+    "smtp_send_to" => "php-emcotech@drop.tf",
+    "smtp_port" => 587,
+    // Path des modules
+    "cpumarks_path" => '/home/connexio/recond/cpumarks',
+    // Applications avec clés prédéfinies
+    "apps" => [
+        "jeanjacques" => [
+            "description" => "Windows • Application d'audit PC par Jean-Jacques FOUGÈRE (Bordeaux).",
+            "keys" => [
+                // Client key with limited permissions
+                "xxx" => [
+                    "acl" => 3,
+                    "description" => "App",
+                ],
+                // Client key with limited permissions
+                "xxx" => [
+                    "acl" => 3,
+                    "description" => "App SendZip",
+                ],
+            ],
+        ],
+        "emcotech" => [
+            "description" => "Windows • Application d'audit téléphones et tablettes iOS et Android par Joffrey SCHROEDER (Strasbourg).",
+            "keys" => [
+                // Admin key with full permissions
+                "xxx" => [
+                    "acl" => 8,
+                    "description" => "Admin",
+                ],
+                // Client key with limited permissions
+                "xxx" => [
+                    "acl" => 3,
+                    "description" => "App",
+                ],
+            ],
+        ],
+        "linux" => [
+            "description" => "Linux • Application d'audit pour PC tournant sur Linux par Bernard MAISON (Grenoble).",
+            "keys" => [
+                // Admin key with full permissions
+                "xxx" => [
+                    "acl" => 8,
+                    "description" => "Admin",
+                ],
+                // Client key with limited permissions
+                "xxx" => [
+                    "acl" => 3,
+                    "description" => "App",
+                ],
+            ],
+        ],
+        "linuxdev" => [
+            "description" => "Audit Linux Développement",
+            "keys" => [
+                // Admin key with full permissions
+                "xxx" => [
+                    "acl" => 8,
+                    "description" => "Admin",
+                ],
+                // Client key with limited permissions
+                "xxx" => [
+                    "acl" => 3,
+                    "description" => "App",
+                ],
+            ],
+        ],
+    ],
     'auth' => [
         'CRÉTEIL' => [
             [ 'username' => 'user1', 'email' => '', 'pass' => 'password1', 'acl' => 1, 'prefix' => 'CR'],
@@ -55,7 +121,7 @@ return [
             [ 'username' => 'glochet', 'email' => '', 'pass' => '', 'acl' => 5, 'prefix' => 'RO'],
         ],
     ],
-    'regions' => [
+    "regions" => [
         "ST" => "STRASBOURG",
         "SD" => "SAINT-DENIS",
         "MB" => "MAISON BLANCHE",
@@ -69,5 +135,5 @@ return [
         "LI" => "LILLE",
         "VI" => "VICTOIRES",
         "TE" => "TEST",
-    ]
+    ],
 ];

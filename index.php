@@ -418,6 +418,60 @@ $region = $parentFolder;
             font-weight: bold;
         }
 
+        
+        #headerTable {
+            width: 100%;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        #headerTable td {
+            padding: 5px 10px;
+            white-space: nowrap;
+        }
+
+        #headerTable td:not(.credits-label):not(.credits-authors) {
+            width: 1px;
+        }
+
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+            #headerTable,
+            #headerTable tbody,
+            #headerTable tr {
+                display: block;
+                width: 100%;
+            }
+            
+            #headerTable td {
+                display: block;
+                width: 100% !important;
+                white-space: normal;
+                text-align: left;
+                padding: 8px 10px;
+                border-bottom: 0px solid #eee;
+            }
+            #headerTable td:last-child {
+                border-bottom: var(--border-thickness) solid var(--border-color);
+            }
+            
+            .credits-label {
+                /* font-weight: bold;
+                background-color: #f5f5f5; */
+            }
+        }
+
+        /* Tablet adjustment */
+        @media (max-width: 1024px) and (min-width: 769px) {
+            #headerTable {
+                font-size: 13px;
+            }
+            
+            #headerTable td {
+                padding: 5px 8px;
+            }
+        }
+
         @keyframes spin {
             0% {
                 transform: rotate(0deg);
@@ -782,6 +836,9 @@ $region = $parentFolder;
     }
     ?>
     <?php
+    if (!$isSubdir) {
+        echo '<br/><br/>';
+    }
     if ($isSubdir) {
         echo '<span class="auth-infos">';
 
@@ -930,8 +987,12 @@ $region = $parentFolder;
     }
     ?>
 
-    <br />
+    <?php
 
+    echo "<br />";
+
+    ?>
+    
     <?php
     if ($isSubdir && $path == '.') {
         // Compter le nombre d'éléments dans la corbeille
@@ -945,7 +1006,7 @@ $region = $parentFolder;
 
         echo '<table id="headerTable">';
         echo '<tr class="table-row-link">';
-        echo '<td class="file-cell" style="border-bottom:0"><span class="icon" style="float:left">🗑️</span><a class="table-row-link" title="Voir la corbeille" href="?path=./CORBEILLE">Voir la corbeille (' . $trashCount . ')</a></td>';
+        echo '<td class="file-cell"><span class="icon" style="float:left">🗑️</span><a class="table-row-link" title="Voir la corbeille" href="?path=./CORBEILLE">Voir la corbeille (' . $trashCount . ')</a></td>';
         echo "</tr>";
         echo "</table>";
     }
@@ -1010,7 +1071,12 @@ $region = $parentFolder;
         <p id="loading-message"></p>
     </div>
 
-    <br /><br />
+    <?php
+    
+    if ($isSubdir) {
+        echo '<br /><br />';
+    }
+    ?>
 
     <script>
         let searchTimeout;
@@ -1906,13 +1972,12 @@ $region = $parentFolder;
 
 <?php
 
-echo '<table id="headerTable" style="margin-bottom:15px">';
+echo '<table id="headerTable" style="margin-bottom:15px; width:100%;">';
 echo '<tr class="footer">';
-echo '<td class="" style="width:1px;white-space: pre;">Crédits</td>';
-echo '<td class="" style="white-space: pre;"><i><a href="//schroed.fr" target="blank_">Joffrey SCHROEDER</a> • Jean-Jacques FOUGÈRE • Bernard MAISON</i></td>';
-echo '<td class="" style="width:1px;white-space: pre;"><a href="//github.com/emmausconnect/audits-recond" target="_blank">Version ' . config('version') . '</a></td>';
-echo '<td class="" style="width:1px;white-space: pre;"><a href="//' . config('hostname') . '/api/apps/web" target="_blank">Applications</a></td>';
-echo '<td class="" style="width:1px;white-space: pre;"><a href="//' . config('hostname') . '/api" target="_blank">API</a></td>';
+echo '<td class="credits-apps"><a href="//' . config('hostname') . '/api/apps/web" target="_blank">Applications</a></td>';
+echo '<td class="credits-api"><a href="//' . config('hostname') . '/api" target="_blank">API</a></td>';
+echo '<td class="credits-authors"><i><a href="//schroed.fr" target="_blank">Joffrey SCHROEDER</a> • Jean-Jacques FOUGÈRE • Bernard MAISON</i></td>';
+echo '<td class="credits-version"><a href="//github.com/emmausconnect/audits-recond" target="_blank">Version ' . config('version') . '</a></td>';
 echo "</tr>";
 echo "</table>";
 

@@ -1,26 +1,27 @@
-# Allow .gitkeep files in subdirectories
-!*/
-!*/.gitkeep
+# Ignore everything at first level
+/*
 
-# Allow specific folders and their contents
+# Allow only these directories
 !api/
-!api/**
 !storage/
+
+# Ignore everything in all other subdirectories  
+*/*
+
+# But allow everything in api and storage recursively
+!api/**
 !storage/**
 
-# Ignore specific file types in api
+# Allow .gitkeep everywhere
+!**/.gitkeep
+
+# Now block specific file types
 api/**/*.txt
 api/**/*.log
-
-# Ignore specific file types in storage
 storage/**/*.zip
 storage/**/*.exe
-storage/*.iso
 storage/**/*.iso
 
-# Ignore all other files in subdirectories
-*/*
-!*/.gitkeep
-
-# Still specifically ignore config.php anywhere
+# Block config.php
 config.php
+**/config.php

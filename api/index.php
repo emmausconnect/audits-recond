@@ -69,7 +69,6 @@ function checkPathExistsInOtherMethods($routes, $requestPath, $currentMethod) {
     return $supportedMethods;
 }
 
-
 $routes = [
     "GET" => [
         "/version/?" => ["handler" => "getApiVersion", "acl" => 0],
@@ -117,12 +116,24 @@ $routes = [
             "handler" => "getAppChangelogRaw",
             "acl" => 0,
         ],
-        "/cpu/?" => [
-            "handler" => "getCpuBenchmark",
+        "/cpu/update" => [
+            "handler" => "cpuUpdateDB",
             "acl" => 0,
         ],
-        "/cpu/csv/?" => [
-            "handler" => "getCpuBenchmarkCSV",
+        "/cpu/version" => [
+            "handler" => "cpuVersion",
+            "acl" => 0,
+        ],
+        "/cpu/debug" => [
+            "handler" => "cpuDebug",
+            "acl" => 0,
+        ],
+        "/cpu/csv" => [
+            "handler" => "cpuCSV",
+            "acl" => 0,
+        ],
+        "/cpu/([^/]+)/?" => [
+            "handler" => "cpuMark",
             "acl" => 0,
         ],
     ],
@@ -3159,40 +3170,181 @@ function fetchCpuBenchmarkData(): ?array
         return null;
     }
 
-    return $json["data"];
+    return $json;
 }
 
-function getCpuBenchmark(): void
+function cpuDebug(): void 
 {
+    $cpumarksPath = config('cpumarks_path');
+
+    // === DEBUG: Vérifions la structure ===
+    echo "=== DEBUG INFO ===\n";
+    echo "cpumarksPath: $cpumarksPath\n";
+    echo "PHP __DIR__: " . __DIR__ . "\n";
+    echo "Home directory: " . shell_exec("echo ~") . "\n";
+    echo "Current working directory: " . shell_exec("pwd") . "\n";
+    
+    echo "\n=== Listing cpumarksPath directory ===\n";
+    echo shell_exec("ls -la " . escapeshellarg($cpumarksPath));
+    
+    echo "\n=== Checking for Python ===\n";
+    echo "Looking for: $cpumarksPath/venv/bin/python\n";
+    echo "Exists? " . (file_exists("$cpumarksPath/venv/bin/python") ? "YES" : "NO") . "\n";
+    
+    echo "\n=== Available Python ===\n";
+    echo shell_exec("which python3");
+    echo shell_exec("python3 --version");
+    
+    echo "\n=== Looking for venv ===\n";
+    echo shell_exec("find $cpumarksPath -name 'python' -o -name 'python3' 2>&1");
+}
+
+/**
+ * Updates CPU marks database via PHP fetch + Python processing
+ * Workaround for OVH mutualized hosting where CLI can't fetch external sites
+ */
+function cpuUpdateDB(): void 
+{
+    $cpumarksPath = config('cpumarks_path'); // Chemin absolu vers le dossier cpumarks
+    $prefetchJsonFile = $cpumarksPath . '/cpumarks-prefetch.json';
+
+    // Save to prefetch JSON file
     $data = fetchCpuBenchmarkData();
-    if ($data !== null) {
-        header("Content-Type: application/json");
-        echo json_encode($data);
+    file_put_contents($prefetchJsonFile, json_encode($data['data'], JSON_PRETTY_PRINT));
+
+    // Step 2: Run Python update script with environment variable
+    $pythonBin = "$cpumarksPath/venv/bin/python";
+    $updateScript = "$cpumarksPath/marksdata/update_the_db.py";
+    
+    // Set environment variable and run Python script
+    $command = "CPU_MARKS_PREFETCH_JSON=" . escapeshellarg($prefetchJsonFile) . " $pythonBin $updateScript 2>&1";
+    $output = shell_exec($command);
+
+    // Parse Python output to check success
+    $lines = explode("\n", trim($output));
+    $lastLine = end($lines);
+    $result = json_decode($lastLine, true);
+    
+    if ($result && $result['status'] === 'success') {
+        echo $output;
+        
+        // Cleanup prefetch file
+        if (file_exists($prefetchJsonFile)) {
+            unlink($prefetchJsonFile);
+        }
+    } else {   
+        if ($result && isset($result['reason'])) {
+            sendResponse(400, [
+                "error" => true,
+                "message" => "Erreur lors de la mise à jour du CSV",
+                "reason" => $result['reason']
+            ]);
+        } else {
+            sendResponse(400, [
+                "error" => true,
+                "message" => "Erreur lors de la mise à jour du CSV"
+            ]);
+        }
     }
 }
 
-function getCpuBenchmarkCSV(): void
+/**
+ * Get CPU benchmark by name
+ * @param string $cpuName The CPU name from the URL
+ */
+function cpuMark($cpuName)
 {
-    $data = fetchCpuBenchmarkData();
-    if ($data === null) {
+    // Decode URL-encoded characters (e.g., spaces)
+    $cpuName = urldecode($cpuName);
+    
+    // Prevent accessing the reserved endpoints
+    $reservedEndpoints = ['update', 'version', 'debug', 'csv'];
+    if (in_array(strtolower($cpuName), $reservedEndpoints)) {
+        sendResponse(400, [
+            "error" => true,
+            "message" => "Invalid CPU name"
+        ]);
         return;
     }
-
-    header("Content-Type: text/csv");
-    header('Content-Disposition: attachment; filename="benchmark.csv"');
-
-    $fp = fopen("php://output", "w");
-    $first = true;
-
-    foreach ($data as $row) {
-        if ($first) {
-            fputcsv($fp, array_keys($row));
-            $first = false;
-        }
-        fputcsv($fp, $row);
+    
+    $cpumarksPath = config('cpumarks_path');
+    $pythonBin = "$cpumarksPath/venv/bin/python";
+    $lookupScript = "$cpumarksPath/marklookup/get_mark_of_cpu.py";
+    
+    $escapedCpu = escapeshellarg($cpuName);
+    $command = "$pythonBin $lookupScript --json -c $escapedCpu 2>&1";
+    
+    $output = shell_exec($command);
+    
+    if (!$output) {
+        sendResponse(500, [
+            "error" => true,
+            "message" => "Failed to execute CPU lookup"
+        ]);
+        return;
     }
+    
+    $result = json_decode($output, true);
+    
+    if (!$result) {
+        sendResponse(500, [
+            "error" => true,
+            "message" => "Invalid response from CPU lookup script",
+            "raw_output" => $output
+        ]);
+        return;
+    }
+    
+    header("Content-Type: application/json");
+    echo json_encode($result);
+}
 
-    fclose($fp);
+/**
+ * Download the latest cached CSV file
+ */
+function cpuCSV(): void
+{
+    $cpumarksPath = config('cpumarks_path');
+    $symlinkPath = "$cpumarksPath/marksdata/cpumarks.csv";
+    
+    if (!file_exists($symlinkPath)) {
+        http_response_code(404);
+        header("Content-Type: application/json");
+        echo json_encode([
+            "error" => true,
+            "message" => "Fichier introuvable"
+        ]);
+        return;
+    }
+    
+    // Get actual file path
+    if (is_link($symlinkPath)) {
+        $targetFile = readlink($symlinkPath);
+        $fullPath = "$cpumarksPath/marksdata/$targetFile";
+    } else {
+        $fullPath = $symlinkPath;
+        $targetFile = basename($symlinkPath);
+    }
+    
+    // Send file as download
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $targetFile . '"');
+    header('Content-Length: ' . filesize($fullPath));
+    
+    readfile($fullPath);
+}
+
+function cpuVersion(): void 
+{
+    $cpumarksPath = config('cpumarks_path');
+    $pythonBin = "$cpumarksPath/venv/bin/python";
+    $versionScript = "$cpumarksPath/get_version.py";
+    
+    $output = shell_exec("$pythonBin $versionScript 2>&1");
+    $data = json_decode($output, true);
+    
+    header("Content-Type: application/json");
+    echo json_encode($data);
 }
 
 // Fonctions utilitaires
