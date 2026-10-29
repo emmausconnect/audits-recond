@@ -1,3 +1,170 @@
+🍉 v2.7.2 🍉 | 25/09/26
+ ———— TecTech ————
+
+ - Blocage avant envoi : si l'enregistrement TecTech retrouvé par numéro de
+   série possède déjà un ID-Reconditionneur non vide et différent de celui de
+   l'audit, aucune modification n'est envoyée. Un message invite à contacter
+   un référent (avec un lien vers la fiche et ses informations). S'applique
+   aux audits PC, Android et iOS.
+
+🍉 v2.7.1 🍉 | 07/03/25
+ ———— Audits PC ————
+
+ - Le champs "commentaire" pour les audits PC aura maintenant des infos
+   supplémentaires pour s'aligner sur ce que fait l'audit de Jean-Jacques.
+   C'est à dire : La pondération, l'indice cpu, la note global, le nom de l'OS Complet…
+
+ ———— Audits ————
+
+  - Ajout d'un popup de warning quand l'ID Lot est renseigné, signalant
+   que celui-ci ne doit n'être renseigné que pour créer un NOUVEAU matériel dans TecTech.
+   Afin d'éviter la problmétique des doublons.
+
+ - Suppression de la méthode d'audit BOLC.
+
+🍉 v2.7.0 🍉 | 27/02/25
+ ———— Audits PC ————
+ - Normalisation de la marque "Microsoft" dans les audits PC pour la
+   compatibilité avec TecTech.
+   (ex: Surface Pro 7, Surface Laptop Go, etc…)
+
+- Lors de la copie du dossier "Découverte mon PC" sur le bureau, les raccourcis
+  vers les fichiers "Découverte de mon PC.pdf" et "LE CONTRÔLE PARENTAL.pdf"
+  ne sont plus ajoutées sur le bureau.
+
+ ———— Audits ————
+- Lors de l'envoie vers TecTech la vérification de doublon se fait maintenant en
+  premier lieu par le numéro de série puis par l'Id Materiel Reconditionneur
+  plutôt que l'inverse.
+
+🍉 v2.6.12 🍉 | 04/02/25
+ ———— Audits Tél ————
+ - [TECTECH] Corrige un bug qui empêchait l'envoi vers TecTech pour les iPhone.
+
+🍉 v2.6.10 🍉 | 02/02/25
+ ———— Audits PC ————
+
+- [TECTECH] L'ID Reconditionneur (Matériel) est maintenant bien pris en compte.
+
+🍉 v2.6.9 🍉 | 02/02/25
+ ———— Audits Tél ————
+
+- [TECTECH] L'ID Lot est maintenant bien pris en compte.
+
+🍉 v2.6.8 🍉 | 30/01/25
+ ———— Audits ————
+
+- [TECTECH] Met en avant le message sous l'ID Lot, qui est obligatoire
+  pour les appareils n'étant pas déjà sur TecTech.
+  C'est à dire les appareils n'ayant pas déjà leur numéro de série où
+  leur ID Reconditionneur déjà sur TecTech. Par exemple un nouvel appareil.
+
+🍉 v2.6.7 🍉 | 27/01/25
+ ———— Audits Tél ————
+
+- [BOLC] Corrige une erreur de variable non définie. (Merci Philippe Ruppli)
+
+🍉 v2.6.6 🍉 | 15/01/25
+ ———— Audits ————
+
+- [TECTECH] Amélioration de la gestion & de l'affichage des erreurs TECTECH.
+
+🍉 v2.6.5 🍉 | 14/01/25
+ ———— Audits Tél ————
+
+- [BOLC] Correctif pour BOLC
+
+🍉 v2.6.4 🍉 | 14/01/25
+ ———— Audits PC & Tél ————
+
+- [TECTECH] Ajout du support de l'envoie automatique vers TecTech.
+- [TECTECH] Ajout de la possibilité d'entrer l'id du lot (facultatif) TecTech.
+
+🍉 v2.6.3 🍉 | 08/01/25
+ ———— Audits Tél ————
+- Correction des seuils de détection du stockage pour les téléphones Android.
+  Suite à un report par mail de Hacène pour les Samsung Galaxy S8.
+  L'audit du Galaxy S8 avec ID SDSM26-0032 retournait 128GB au lieu de 64GB.
+
+🍉 v2.6.2 🍉 | 30/12/25
+ ———— Audits PC ————
+- Ré-écriture complète de l'UI de demande de pondération pour les PC.
+- Ré-écriture complète du script d'audit.
+  Entre 30% et 50% de gain de vitesse d'execution.
+
+⚠️⚡️ v2.6.1 ⚡️⚠️ | 28/12/25
+—————————————————————
+MISE À JOUR CRITIQUE: Les envois vers le BOLC fonctionnent à nouveau.
+
+———— Audits PC ————
+- Correction de l'interface utilisateur "Demande pondération" pour les PC.
+- Correction d'un bug qui faisait que le clic sur la croix ou "annuler"
+  dans la fenêtre de demande de pondération n'annulait pas l'audit en cours.
+- Correction de la taille de la fenêtre de demande de pondération.
+
+Merci à Philippe Ruppli pour ces tests et sa patience!
+
+⚠️⚡️ v2.6.0 ⚡️⚠️ | 28/12/25
+———— Audits PC & Tél ————
+
+MISE À JOUR CRITIQUE : Les envois vers le BOLC fonctionnent à nouveau !
+
+🎄 v2.5.6 🎄 | 25/12/25
+———— Audits PC ————
+
++ Bascule de l'API CPU vers https://audits.emmaus-connect.org/api/cpu/{} qui elle même
+  est basée sur l'outil Python de Paul Ghaleb : https://github.com/emmausconnect/cpumarks
+
+🍉 v2.5.5 🍉 | 17/11/25
+———— Audits PC ————
+
++ Bugfix en mode audit BOLC
+
+🍉 v2.5.4 🍉 | 16/11/25
+———— Intialisation PC ————
+
++ La batterie résiduelle n'est plus affichée en jaune illisible
+  dans la fenêtre EmCoTech sous le bouton "Démarrer test batterie"
+
+🍉 v2.5.3 🍉 | 15/11/25
+———— Audits PC / TEL ————
+
++ Bug fix sur la nouvelle implémentation dual audit BOLC / TEC.TECH
+
+🍉 v2.5.0 🍉 | 15/11/25
+———— Audits PC ————
+
++ Mise à jour de l'outil de Jean-Jacques vers la version 4.8.4
+  (16/11/25)
+
++ Ajoute l'OS Actuel (Windows 10 / 11 où Windows) dans le champs
+  "Commentaire sur le reconditionnement".
+  Ce champs était utilisé en copie du champs "Observations"
+  dans tous les cas et n'était donc pas utile.
+
++ L'ordinateur est maintenant renommé avec l'ID EC après un audit.
+  Un redémarrage est nécessaire pour voir le changement.
+
++ Le bouton pour utiliser l'ancienne catégorisation a été retiré.
+
+———— Audits PC et SM ————
+
++ Ajout d'un champs pour entrer l'ID donné par le reconditionneur pro
+
++ Ajout d'une case à cocher "Envoyer vers le BOLC" lors de l'audit.
+  Si cette case est cochée, l'audit sera envoyé automatiquement
+  vers le BOLC à la fin de l'audit, sans demander de confirmation.
+  Ceci est utile pour les régions qui font beaucoup d'audits et
+  veulent gagner du temps.
+
++ Recherche du nom actuel du Wi-Fi de manière asynchrone.
+  + Cette fonction permettera d'executer différente action selon
+  le réseau Wi-Fi actuel, et donc selon la région où l'audit est fait.
+  Si chaque région à son propre SSID Wi-Fi différent, on pourra par
+  exemple pré-remplir le début de certains champs automatiquement.
+  + Se connecter au Wi-Fi "ECRec67", remplie automatiquement le début de
+  l'ID avec STPC pour les PC et ST pour les smartphones / tablettes.
+
 🍉 v2.4.4 🍉 | 02/10/25
 
 ———— Général ————
@@ -149,7 +316,7 @@
 
 🍉 v2.2.10 🍉 | 13/06/25
 
-———— Téléchargements (Update, Software...) ————
+———— Téléchargements (Update, Software…) ————
 
 + Énième tentative de correction de l'erreur Divid By Zero
   qui fait planter le programme lors d'un téléchargement.
@@ -268,7 +435,7 @@
   Cela permet de réduire l'usure des disques SSD et améliore les performances.
   https://learn.microsoft.com/fr-FR/windows-server/administration/windows-commands/fsutil-behavior
 
-+ Tentative de correction (Encore...) d'un bug lors du téléchargement.
++ Tentative de correction (Encore…) d'un bug lors du téléchargement.
   "Divide by zero" qui apparaît quand la connexion est instable.
 
 🍉 v2.1.2 🍉 | 03/04/25
@@ -876,7 +1043,7 @@ Date: 21/02/24 en stable
 ———— Audit Android ————
 
 + Les exports CSV / Copie pour Sheets ne contiennent plus les mentions de taille
-  GB, MB, ... pour être en parité avec l'outil d'audit des PC.
+  GB, MB, … pour être en parité avec l'outil d'audit des PC.
 + Ajout d'un nano-fiche encore plus petite.
 + La fenêtre Observations et pondération est maintenant fermable pour interrompre
   un audit android immédiatement sans avoir a le valider obligatoirement.
@@ -1289,7 +1456,7 @@ Date: 11/12/23 en bêta
   ne requiert pas de connecter un appareil.
   Vous devrez alors remplir tous les champs manuellement.
   Pratique pour les appareils non supportés par cet outil,
-  par exemple, les iPhone, iPad, ...
+  par exemple, les iPhone, iPad, …
 
         v1.6.8
 
@@ -1385,7 +1552,7 @@ Observations et pondération
       uniquement le texte de Fabricant sera utilisé,
       au lieu de fusionner les deux, pour les fichers
       subséquents. Cela évite d'avoir
-      un fichier HTML qui se nomme Samsung Samsung SM-...
+      un fichier HTML qui se nomme Samsung Samsung SM-…
 
 Batterie
     + Correction du texte du statut de la batterie reportant

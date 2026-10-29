@@ -1,151 +1,260 @@
--------------------- V2.5.0 1 Oct 2025 -------------------------------
+## Si vous utilisez cet outil pour la première fois…
 
-Fonctions:
-    AuditLinux s'enrichit d'un MENU  [Version BETA]  ( appelable via "bash menu.sh" )
-    - Appel d'outils de tests ( disque, batterie, clavier/son/webcam )
-    - Saisie des Caractéristiques Matériel ( et mémorisation des infos saisies )
-    - Lancement de l'Audit ( mini-audit ou audit+transferts)
-    - Utilitaires BOLC ( changement de statut du PC )
-    - Accès aux sites web des constructeurs
-    - Documentation
-    - Oubli de l'identifiant Emmaus, précdemment saisi
+- l'outil peut être téléchargé depuis le site [audits.emmaus-connect.org](https://audits.emmaus-connect.org/api/apps/linux/web) sous la forme d'un fichier ```linux-x.y.z.tgz```
 
-    L'audit continue à être appelable directement
-        # en fournissant l'identifiant Emmaus
-        bash audit.sh  GRPCxx-nnnn
+- le fichier se décompresse avec une commande qui créera localement un répertoire ```audit-linux-x.y.z``` contenant l'outil:
+```
+tar xzf linux-x.y.z.tgz
+```
 
-        # sans saisir l'identifiant Emmaus => il sera demandé et mémorisé 
-        bash audit.sh  
+#### Ensuite, ```README.pdf``` reste la référence 😃
 
-    Le test de batterie continue à être appelable directement
-        bash batterie.sh
+Depuis la ```4.3.1```, le style d'appel de la commande a changé. Voici des exemples pour les cas les plus courants:
+##### Usage standard: audit puis transferts vers base d'audits et tec.tech
+```commandline
+bash audit.sh -i IdentifiantPC
+```
+##### Mini-audit: réaliser un audit sans identifier le PC et quitter
+```commandline
+bash audit.sh -m
+```
+##### Aide plus complète
+```commandline
+bash audit.sh -h
+```
 
-Remarque:
-    L'audit lance désormais une fenêtre qui affiche les infos du PC.  Penser à fermer/minimiser cette fenêtre, si elle recouvre les écrans de saisie ...
+# Version actuelle
 
-Correctifs:
-    On survit désormais au cas particulier où le fichier généré par la commande inxi contient des caractères incorrects ( non UTF-8 ), typiquement dans le nom de la batterie
+## 5.1.1
 
--------------------- V2.4.1  23 Juin 2025 ------------------------------- -
+- j'ai intégré la non-recherche sur `numeroSerie` (que j'avais oubliée dans la `5.1.0`!)
 
-Correctif:
-    calcul du cpumark:
-       correction d'un bug, qui provoquait une confusion entre   Intel Core i3-6100U    /  Intel Core i3-6100
-       amélioration de la détection des cpuname de type  Intel Core i7 M 620     ( changer en Intel Core i7-620M )
-
--------------------- V2.4.0  12 Juin 2025 ------------------------------- -
-
-Fonctions:
-    Nouvelle catégorisation: mise à jour de regles.csv
-
-    Le fichier cpuchange.csv  permet de mémoriser des listes de correspondances: pour les cas où le nom de CPU trouvé par l'analyse système est très différent de cpubenchmark.net
-        ex:  i5 M 520  => Intel Core i5-520M
-
-    Possibilité de saisir le nom commercial du modèle de PC, et de l'injecter dans la FicheAchat
-
-    Copie du fichier LeControleParental.pdf sur le bureau
-
-    MAJ auto: Vérifie l'existence d'une version plus récente sur le serveur Emmaus, et propose le download
-
-Interne:
-    Purge de cpus.csv : 
-        contient désormais uniquement les cpu "mono socket" ( on ne traite pas de serveurs haut de gamme ! )
-        on se débarrasse de la fréquence cpu située après @
+- les messages affichés dans la console sont plus lisibles, notamment pour les données échangées avec tec.tech
 
 
--------------------- V2.3.0  25 Mai 2025 ------------------------------- -
-Fonctions:
-    Génération d'une "FicheAchat.rtf" , suivant le modèle Jean-Jacques
-    Renommage "Remarques" en "Observations"
-    Documentation: la partie "concepts de base" a été séparée dans un document à part (commun Windows/Linux)
+## 5.1.0
 
-Interne:
-    Purge de répertoire, pour éviter une prolifération de fichiers Bolc
-    Mémorisation du nom de fichier Bolc, pour pouvoir relancer le transfert ultérieurement
-    IHM: changement gestion valeurs initiales
-    
--------------------- V2.2.0  27 avril 2025 --------------------------------
-Découplage des écrans: Infos Techniques / Infos Administratives
-( Ca passe mieux sur des écrans à faible taille X/Y )
+- **changement important**: `numeroSerie` n'est plus utilisé comme clé de recherche dans tec.tech; donc l'`identifiantPC` passé en paramètre au programme d'audit sera recherché comme `idEsn` ou comme `idMaterielReconditionneur`; s'il n'est pas trouvé, la recherche s'arrête
 
-On peut modifier le CPUMARK détecté automatiquement
+- si le PC en cours d'audit est trouvé dans tec.tech, et si son `numeroSerie` est non-vide et différent de celui "lu" par le programme dans le HW en cours d'audit alors les informations de tec.tech ne sont pas mises à jour
 
-Corrections dans le fichier des CPU
+- les disques de type MMC sont désormais reconnus et traités comme des HDD pour la catégorisation (en attendant que le document spécifiant la catégorisation soit mis à jour)
 
-Copie mini-fiche ( formats douchette+smartphone ) sur le Bureau [Suggestion C.Marvin]
-
--------------------- V2.1.5  11 avril 2025 --------------------------------
-Le dépots des fichiers d'audit se fait désormais sur https://audits.emmaus-connect.org 
-
-L'audit linux est maintenant téléchargeable depuis https://audits.emmaus-connect.org/api/apps/linux/download/latest
-
-Séparation Linux
-
--------------------- V2.1.4  4 avril 2025 --------------------------------
-Possibilité de déclarer un matériel comme TA dans l'identifiant
-( dans ce cas, le type est forcé à "Tablette" )
-
-Le fichier d'import sftp pour le bolc est systématiquement généré, et rajouté sur drop.tf
-
--------------------- V2.1.3   30Mars2025 --------------------------------
-
-Nouvelles règles de cotation des PC
-- suppression HC , INVENDABLE
-- changement du seuil CPUMARK pour la note -8
-
-Rajout des règles de cotation Windows
-
-Une 2e mini fiche avec QRcode spécifique douchette
-
-Les parties spécifiques Linux sont isolées dans linux.py 
-
--------------------- V2.1.2   15Mars2025 --------------------------------
-
-Compatibilité avec le Bolc des Portables ayant un type non usuel ( "detachable" et autres ) 
-Petits trucs
- - renommage "Reconditionneur" en "Nom Bénévole" 
- - affichage des infos techniques AVANT la saisie des infos administratives
- - stoppe tout,  si on abandonne la saisie
-
-Ajustement mini-fiche + rajout Date,CPUMARK
-Adaptation Linux des docs de Decouverte-MonPC
-
-------------------- V2.1.0   13Mars2025 -------------------------------
-
-Génération d'une fiche .rtf avec QRCODE
-Rajout champ: ID du PC chez le reconditionneur
-Rajout champ: "origine" (utilisation variable selon les sites !)
-
-IHM pour saisir les infos administratives
+- pour les PC qui ont plusieurs batteries (c'est le cas des 2-en-1, PC+tablette, comme le "Toshiba Z20t"), on rapporte l'état de la batterie principale
 
 
---------------------- V2.0.3   28Fev2025 --------------------------------
+## Si vous souhaitez rapporter une anomalie, faire des suggestions, …
 
-Simplification du décodage Inxi et correction d'un bug aléatoire sur la détection du N° de série
+Pour des questions générales ou des suggestions, vous pouvez utiliser [l'espace GoogleChat dédié à cet outil](https://chat.google.com/room/AAQA-458onA?cls=7).
 
-suppression de la règle: [ si Linux alors  Catégorie B max ]
+Si vous constatez une anomalie, vous pouvez, soit m'envoyer un mail, soit utiliser [l'espace GoogleChat](https://chat.google.com/room/AAQA-458onA?cls=7). Merci de bien vouloir joindre à votre signalement le fichier de trace créé à chaque exécution. Le nom complet de ce fichier est affiché dans les toutes premières lignes de la console; par exemple:
+```
+[INFO]: Nom du fichier de trace: /tmp/audit-linux-journal-20260406.112818.txt
+```
+Dans certains cas, il peut aussi être intéressant de joindre les fichiers suivants portant la même horodate que que le fichier de trace:
+```
+/tmp/lshw-20260406.112818.json
+/tmp/lsblk-20260406.112818.json
+```
+Notez que ces fichiers, du fait qu'ils sont placés dans `/tmp`, ne survivent pas à un rédémarrage du PC.
+
+# Versions antérieures
+## 5.0.0
+
+Cette version introduit des **changements importants**:
+
+- l'utilisation du format `eePCaa-nnnn` pour identifier un PC n'est désormais plus obligatoire; les équipements sont désormais identifiés par une chaîne de caractères de format libre correspondant à `idMaterielReconditionneur` dans le cas où elle ne respecte pas le format `eePCaa-nnnn`; reportez-vous au `README.pdf` pour plus de détails
+
+- comme conséquence du point précédent, il est désormais nécessaire de spécifier l'ESN concerné; cela peut se faire de deux façons:
+  - soit via l'entrée `"esn"` de `techtech-credentials.json`,
+  - soit via le paramètre `-e|--esn` de la ligne de commande (supplante la valeur éventuellement présente dans `techtech-credentials.json`)
+
+- l'ancien style de passage des paramètres n'est plus disponible: chaque paramètre doit désormais être nommé; par exemple, au lieu de:
+    ```commandline
+    # syntaxe obsolète
+    bash audit.sh identifiant_quelconque
+    ```
+    on écrira:
+    ```commandline
+    # syntaxe valide
+    bash audit.sh -i identifiant_quelconque
+    ```
+
+## 4.4.1
+
+Cette version corrige quelques défauts mineurs:
+
+- la "*CPU string*" est désormais correctement extraite sur certains équipements (signalé par Philippe R. et, à ce jour, visible seulement sur certains MacBook)
+
+- le résultat de la commande ```inxi``` est désormais traité comme du binaire pour créer le fichier ```scan-linux.txt``` (signalé par Charles M.: sur un équipement particulier, unique à ce jour, le résultat de ```inxi``` ne se décode pas en UTF-8)
+
+- une référence (Python) erronée lors de la création d'un équipement a été corrigée (signalé par Martin G.)
+
+- la nouvelle implémentation, encore en cours de test, de la procédure de catégorisation intègre désormais le bonus/malus technique ou esthétique (aucune incidence pour vous)
+
+Cette version devrait être la dernière de la lignée ```4.x.y```. En effet, il est prévu que **la prochaine version (```5.x.y```) introduise un changement majeur**: l'utilisation de l'```idEsn``` ne sera plus obligatoire. 
 
 
--------------------- V2.0.2 27Fev2025 --------------------------------
+## 4.4.0
 
-Date au format jj/mm/aa dans le rapport
-Rajout de l'os détaillé dans le fichier Bolc
+- le bug (signalé par Philippe P.) qui bloquait la création d'un matériel en l'absence d'un idMaterielReconditionneur est corrigé: dans un tel cas on force sa valeur à celle de idEsn
 
-Ne plus utiliser le package python "requests" pas toujours présent
+- les PC avec un disque principal utilisant une connexion ATA, généralement très vieux, sont désormais bien pris en compte (limite signalée par Jean-Jacques F.)
 
-Rajout du nom de fichier d'import Bolc dans le rapport stocké sur drop.tf 
-( permet de facilitier les recherches en cas de pb d'import Bolc)
-
--------------------- V2.0.1 26Fev2025 --------------------------------
-
-Inxi renvoie des tailles disk/ram en GiB . ( 1024*1024*1024 bytes ) Conversion en GB ( 1000*1000*1000 bytes )
-
-Arrondir les tailles Disk/Ram
-
-Surprise! Inxi renvoie 2 valeurs "serial" parfois différentes sur certains PC !  
-La 2e valeur semble correspondre au chassis, avec parfois des valeurs bidon 
-
--------------------- V2.0.0  25Fev2025 --------------------------------
-Diffusion initiale
+- j'ai introduit une nouvelle implémentation, encore en cours de test, de la procédure de catégorisation; à ce jour, elle n'a aucune incidence sur l'audit: elle est exécutée en plus et, en cas d'écart, alimente une base de données qui est analysée par ailleurs
 
 
+## 4.3.1
+
+- le bug relatif au calcul de la note en cas de SSD est corrigé (signalé par Charles M.)
+
+- j'ai introduit un nouveau style de commande (plus standard) pour lancer l'audit; l'ancien style reste utilisable mais pourrait être supprimé dans une prochaine version; compte tenu de l'urgence pour le bug mentionné ci-dessus, la mise à jour du README est reportée à plus tard
+
+- il est désormais possible de lancer un "mini-audit": il se limitera à l'affichage des informations d'audit à l'écran (sans contact avec les serveurs d'audit et tec.tech)
+
+- l'affichage des informations dans la boîte de saisie manuelle des informations techniques est plus précis
+
+- la gestion des "marques" a été améliorée pour les cas où la marque détectée ne correspond pas exactement a une de celles listées dans tec.tech
+
+
+## 4.3.0 - ne pas utiliser (cette version a un bug gênant dans le cas ou le disque principal est un SSD)
+
+Cette version est importante quoique quasiment *cosmétique*. Vu des utilisateurs, l'intention est de marquer une pause dans les modifications fonctionnelles en attendant un plus large retour d'expérience.
+
+- les actions du menu principal (lancé avec ```menu.sh```) et qui impliqueraient une interaction avec tec.tech ont été supprimées de ce menu
+
+- quand une nouvelle version est téléchargée, elle va désormais dans ```${HOME}/Téléchargements``` (ou son équivalent pour les langues autres que le français)
+
+- l'affichage de messages au fil de l'exécution a été entièrement revu:
+  - seuls les messages les plus importants apparaissent dans la console
+  - tous les messages pouvant aider au debug vont dans un fichier de trace dont l'usage est décrit dans README.pdf
+
+
+## 4.2.1
+
+- numéro de version corrigé!
+
+
+## 4.2.0
+
+- une section "première fois…" a été ajoutée ici-même pour aider les débutant(e)s
+
+- on utilise les *statuts* définis par tec.tech (et non plus ceux du BOLC)
+
+- on affiche plus clairement la nature du disque principal (HDD/SSD, ATA/NVME)
+
+- ```../eettaa-nnnn/...``` appartient désormais à l'utilisateur qui lance l'audit (et non plus à ```root```); on peut donc le supprimer aisément (demande de Charles M.)
+
+- le fichier CSV tec.tech a été ajouté au ```.zip``` envoyé vers la base des audits
+
+- un gros travail de nettoyage du code *historique* a été commencé:
+  - suppression de toutes les analyses du résultat de *inxi* (ledit résultat est néamoins conservé)
+  - suppression de ```version.txt``` (sa fonction est désormais fournie par ```__about__.py```)
+  - suppression des accès au BOLC
+  - suppression des références à Windows
+  - limitation de l'usage de variables globales trans-fichiers, qui rendent la maintenance très difficile
+
+
+## 4.1.0
+
+- quand les deux premiers critères de recherche n'ont pas trouvé l'équipement, l'outil lance désormais une recherche basée sur le numéro de série qu'il a lui-même extrait (demande de Éric D.) Voir le README pour les détails
+
+
+## 4.0.0
+
+Je considère cette version comme *expérimentale* bien que je l'aie testée du mieux que je pouvais. Si toutefois elle vous pose problème, n'hésitez pas à revenir à la précédente après me l'avoir signalé.
+
+- j'ai entièrement refondu l'extraction des caractéristiques physiques de la machine; elle est désormais plus robuste; cela se voit notamment quand on a affaire à des équipements inhabituels (type "tout-en-un" par exemple); j'ai néanmoins conservé l'affichage de messages relatifs à l'ancienne extraction pour faciliter l'analyse en cas de problème; je réduirai la verbosité de la console au fur et à mesure
+
+- la caractéristique "NVME" (v/s "SATA") est maintenant bien traitée quand on a un disque SSD
+
+- pour ce qui est des disques, je ne prends en compte que le disque principal (celui qui contient la partition ```/```) pour la catégorisation; en effet:
+  - les règles de catégorisation ne sont pas claires pour moi pour le cas où il y a plusieurs disques de types différents
+  - il est très rare d'avoir plusieurs disques sur les PC que nous traitons
+  - j'ai rajouté une ligne AutreDisques dans la liste des caractéristiques affichées, ce qui poussera éventuellement à une pondération technique  
+
+- le fichier TGZ se décompresse désormais en un répertoire dont le nom inclut le n° de version
+
+- le nom de la *version récente* téléchargée par l'outil est désormais le nom du fichier TGZ (au lieu de ```.zip``` auparavant)
+
+- le propriétaire (au sens Linux) des fichiers copiés sur le *bureau* ne devrait plus poser de problèmes de *permissions Linux*
+
+
+## 3.2.3
+
+- j'ai corrigé un bug signalé par Antoine H.: l'outil tentait à tort de modifer l'```idStock``` d'un matériel existant. Pour un matériel à créer, l'outil déduit la valeur de ```idStock``` à partir des deux premières lettres de ```idEsn```.
+
+
+## 3.2.2
+
+- la recherche de la "note CPU" se fait désormais via l'URL dédiée https://audits.emmaus-connect.org/api/cpu/CPUSTR (cette recherche a un taux de réussite proche de 100%)
+
+- les tailles de RAM et de disque sont désormais rapportées dans les unités communément utilisées:
+
+  - GiB (Gio) pour la RAM ==> plus de PC avec 9 ou 17 *gigas* de RAM
+
+  - GB (Go) pour les disques ==> un disque vendu comme faisant *500 gigas* apparaîtra avec cette taille dans l'audit
+
+- le README a été enrichi d'un nouveau paragraphe et amélioré pour l'existant
+
+
+## 3.2.1
+
+- j'ai corrigé un bug signalé par Éric D. (et relatif aux "marques")
+ 
+
+## 3.2.0
+
+- c'est désormais **la base PROD qui est sélectionnée par défaut** (demande de Éric D.)
+
+- un fichier CSV compatible TECT est créé à côté des autres fichiers d'audit (demande de Charles M.)
+
+- la version de la distribution Linux est ajoutée au champ "commentaire" (demande de Philippe R.)
+
+
+## 3.1.1
+
+- j'ai corrigé un bug signalé par Éric D.
+
+
+## 3.1.0
+
+- l'outil ne force plus le mode "*base de test*"
+
+- l'outil permet désormais de créer un nouveau matériel en précisant *idEsn* et *idLot*
+
+- voir ```README.md``` pour la façon d'appeler l'outil à partir de cette version
+
+- les messages d'erreur et de trace ont été améliorés
+
+- on ne met plus sur le bureau que ```DecouverteMonPC-Linux/*``` et ```LeControleParental.pdf```
+
+
+## 3.0.4
+
+Bug corrigé:
+
+- l'indication de présence d'une wecbcam est maintenant correctement gérée
+
+
+## 3.0.2
+
+Quelques améliorations, à la suite des premiers retours de Charles M. et Éric D., que je remercie pour leur patience.
+
+- la recherche d'un matériel par l'identifiant `eettaa-nnnn` (e.g.: GRPC26-1961) donné lors du lancement de `audit.sh` se fait désormais de la façon suivante
+    - on recherche d'abord une correspondance sur le champ `ID ESN` de TECT; si on trouve, on en reste là
+    - sinon, on recherche une correspondance sur le champ `ID matériel chez le reconditionneur`; ce dernier cas est assez fréquent pour les matériels reconditionnés en ESN: l'équipe TECT a décidé, dans un tel cas, de mettre cet identifiant dans `ID matériel chez le reconditionneur` et de laisser `ID ESN` vide.
+
+- le mode DEBUG est par défaut pour avoir des messages plus détaillés dans cette phase
+
+
+## 3.0.1
+
+Ceci est une version de test, la toute première version de l'audit Linux destinée à fonctionner avec tec.tech.
+
+Elle a plusieurs limites et défauts déjà identifiés:
+
+- ne fonctionne qu'avec le script `audit.sh` (`menu.sh` n'est pas garanti de bien marcher avec tec.tech)
+- ne permet d'agir que sur des matériels déjà présents dans tec.tech
+- identifie un matériel par son seul 'idEsn' (pas encore par 'idMaterielReconditionneur')
+- manque un peu de verbosité (pouvant aider au debug en cette phase de test)
