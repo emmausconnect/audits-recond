@@ -25,3 +25,13 @@ storage/**/*.iso
 # Block config.php
 config.php
 **/config.php
+
+# Ne jamais versionner les binaires/archives des apps
+storage/apps/*/versions/
+storage/apps/**/*.7z
+storage/apps/**/*.tgz
+storage/apps/**/*.tar.gz
+storage/apps/**/*.deb
+storage/apps/**/*.rpm
+storage/apps/**/*.AppImage
+storage/apps/**/*.dmg
