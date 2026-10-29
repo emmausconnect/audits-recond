@@ -1,29 +1,33 @@
 # Enable rewrite engine
 RewriteEngine On
 
-# Force download for JSON, TXT, and XML files
+# For JSON, TXT, and XML: force download
 <FilesMatch "\.(json|txt|xml)$">
-    # Set content disposition to force download
     Header set Content-Disposition "attachment"
-    
-    # Set appropriate content types
-    <Files "*.json">
-        Header set Content-Type "application/json"
-    </Files>
-    
-    <Files "*.txt">
-        Header set Content-Type "text/plain"
-    </Files>
-    
-    <Files "*.xml">
-        Header set Content-Type "application/xml"
-    </Files>
-    
-    # Prevent caching to ensure fresh downloads
     Header set Cache-Control "no-cache, no-store, must-revalidate"
     Header set Pragma "no-cache"
     Header set Expires "0"
 </FilesMatch>
+
+# Specific content types for JSON, TXT, XML
+<Files "*.json">
+    Header set Content-Type "application/json"
+</Files>
+<Files "*.txt">
+    Header set Content-Type "text/plain"
+</Files>
+<Files "*.xml">
+    Header set Content-Type "application/xml"
+</Files>
+
+# CMD files: shown in browser, not forced download
+<Files "*.cmd">
+    Header set Content-Disposition "inline"
+    Header set Content-Type "text/plain"
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+</Files>
 
 # Optional: Prevent directory browsing
 Options -Indexes
