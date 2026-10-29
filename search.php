@@ -119,19 +119,30 @@ function searchFiles($directory, $searchTerm, $searchMode) {
     return $results;
 }
 
-function getFileType($fileName, $is_dir) {
+function getFileType($fileName, $is_dir)
+{
     if (str_starts_with($fileName, 'QrCode')) {
         return "▬ QR Code";
-    }
-    else if (str_ends_with($fileName, 'bolc2.csv')) {
+    } else if (str_ends_with($fileName, 'bolc2.csv')) {
         return "📃 CSV BOLC";
     }
-    $suffix = substr($fileName, 2, 2);
+
+    if (preg_match('/([A-Z]{2})_\d{4}_\d{4}/', $fileName, $matches)) {
+        $suffix = $matches[1];
+    } elseif (preg_match('/([A-Z]{2})\d{2}/', $fileName, $matches)) {
+        $suffix = $matches[1];
+    } else {
+        $suffix = substr($fileName, 2, 2);
+    }
+
     switch ($suffix) {
         case "SM":
             return "📱 Smartphone";
         case "PC":
+        case "EM":
             return "🖥️ PC";
+        case "UC":
+            return "🖥️ Unité C.";
         case "TA":
             return "⬜️ Tablette";
         case "TE":

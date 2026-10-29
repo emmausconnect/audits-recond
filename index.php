@@ -1356,12 +1356,22 @@ $region = $parentFolder;
                     return "📃 CSV BOLC";
                 }
 
-                $suffix = substr($fileName, 2, 2);
+                if (preg_match('/([A-Z]{2})_\d{4}_\d{4}/', $fileName, $matches)) {
+                    $suffix = $matches[1];
+                } elseif (preg_match('/([A-Z]{2})\d{2}/', $fileName, $matches)) {
+                    $suffix = $matches[1];
+                } else {
+                    $suffix = substr($fileName, 2, 2);
+                }
+
                 switch ($suffix) {
                     case "SM":
                         return "📱 Smartphone";
                     case "PC":
+                    case "EM":
                         return "🖥️ PC";
+                    case "UC":
+                        return "🖥️ Unité C.";
                     case "TA":
                         return "⬜️ Tablette";
                     case "TE":
@@ -1976,7 +1986,7 @@ echo '<table id="headerTable" style="margin-bottom:15px; width:100%;">';
 echo '<tr class="footer">';
 echo '<td class="credits-apps"><a href="//' . config('hostname') . '/api/apps/web" target="_blank">Applications</a></td>';
 echo '<td class="credits-api"><a href="//' . config('hostname') . '/api" target="_blank">API</a></td>';
-echo '<td class="credits-authors"><i><a href="//schroed.fr" target="_blank">Joffrey SCHROEDER</a> • Jean-Jacques FOUGÈRE • Bernard MAISON</i></td>';
+echo '<td class="credits-authors"><i><a href="//schroed.fr" target="_blank">Joffrey SCHROEDER</a> • Jean-Jacques FOUGÈRE • Bernard MAISON • Paul GHALEB</i></td>';
 echo '<td class="credits-version"><a href="//github.com/emmausconnect/audits-recond" target="_blank">Version ' . config('version') . '</a></td>';
 echo "</tr>";
 echo "</table>";
