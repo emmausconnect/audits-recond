@@ -69,7 +69,6 @@ function checkPathExistsInOtherMethods($routes, $requestPath, $currentMethod) {
     return $supportedMethods;
 }
 
-
 $routes = [
     "GET" => [
         "/version/?" => ["handler" => "getApiVersion", "acl" => 0],
@@ -105,6 +104,10 @@ $routes = [
             "handler" => "downloadSpecificAppVersion",
             "acl" => 0,
         ],
+        "/apps/([a-zA-Z0-9_-]+)/download/([0-9]+\.[0-9]+\.[0-9]+)/(windows|macos|macos-x64|linux)/?" => [
+            "handler" => "downloadSpecificPlatformVersion",
+            "acl" => 0,
+        ],
         "/apps/([a-zA-Z0-9_-]+)/changelog/?" => [
             "handler" => "getAppChangelog",
             "acl" => 0,
@@ -117,12 +120,32 @@ $routes = [
             "handler" => "getAppChangelogRaw",
             "acl" => 0,
         ],
-        "/cpu/?" => [
-            "handler" => "getCpuBenchmark",
+        "/cpu/update" => [
+            "handler" => "cpuUpdateDB",
             "acl" => 0,
         ],
-        "/cpu/csv/?" => [
-            "handler" => "getCpuBenchmarkCSV",
+        "/cpu/version" => [
+            "handler" => "cpuVersion",
+            "acl" => 0,
+        ],
+        "/cpu/debug" => [
+            "handler" => "cpuDebug",
+            "acl" => 0,
+        ],
+        "/cpu/csv" => [
+            "handler" => "cpuCSV",
+            "acl" => 0,
+        ],
+        "/cpu/json" => [
+            "handler" => "cpuJSON",
+            "acl" => 0,
+        ],
+        "/cpu/([^/]+)/?" => [
+            "handler" => "cpuMark",
+            "acl" => 0,
+        ],
+        "/testWebFetch" => [
+            "handler" => "testWebFetch",
             "acl" => 0,
         ],
     ],
@@ -450,9 +473,38 @@ function formatFileSize($size)
     return round($size, 2) . " " . $units[$i];
 }
 
+/**
+ * Formate un timestamp en date/heure lisible en français, sans secondes
+ * Ex: "7 juillet 2026 à 19h18"
+ * @param int $ts Timestamp
+ * @return string Date formatée
+ */
+function formatHumanDateTime($ts)
+{
+    if (class_exists('IntlDateFormatter')) {
+        $fmt = new IntlDateFormatter(
+            'fr_FR',
+            IntlDateFormatter::LONG,
+            IntlDateFormatter::SHORT,
+            null,
+            null,
+            "d MMMM yyyy 'à' HH'h'mm"
+        );
+        $formatted = $fmt->format($ts);
+        if ($formatted !== false) {
+            return $formatted;
+        }
+    }
+    // Repli sans intl
+    $months = [
+        1 => 'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+        'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+    ];
+    return date('j', $ts) . ' ' . $months[(int) date('n', $ts)] . ' ' . date('Y', $ts) . ' à ' . date('H\hi', $ts);
+}
+
 function uploadZip($user)
 {
-    // Vérification que les données nécessaires sont présentes
     if (!isset($_POST["ecid"]) || !isset($_FILES["actual_file"])) {
         logApiUsage($user, '/upload/zip', 'POST', [
             'function' => 'uploadZip',
@@ -465,60 +517,59 @@ function uploadZip($user)
     $ecid = $_POST["ecid"];
     $prefix = substr($ecid, 0, 2);
     $regions = config("regions");
-    $region = isset($regions[$prefix]) ? $regions[$prefix] : "_Région inconnue";
 
-    // Chemin du répertoire de la région
+    if (!empty($_POST["region"])) {
+        $posted_region = strtoupper(trim($_POST["region"]));
+        if (isset($regions[$posted_region])) {
+            $region = $regions[$posted_region];
+        } else {
+            $region = $posted_region;
+        }
+    } else {
+        $region = isset($regions[$prefix]) ? $regions[$prefix] : "_Région inconnue";
+    }
+
     $region_dir = config("project_root_path") . "/" . $region;
 
-    // Vérifiez que le fichier est bien téléchargé
     if ($_FILES["actual_file"]["error"] === UPLOAD_ERR_OK) {
         $uploaded_file = $_FILES["actual_file"]["tmp_name"];
         $filename = $_FILES["actual_file"]["name"];
 
-        // Créez le répertoire si nécessaire
         if (!is_dir($region_dir)) {
             mkdir($region_dir, 0755, true);
         }
 
-        // Déterminez le répertoire de destination basé sur ecid
         $ecid_dir = $region_dir . "/" . $ecid;
 
-        // Si le dossier existe déjà, le déplacer dans "CORBEILLE"
         if (is_dir($ecid_dir)) {
             $corbeille_dir = $region_dir . "/CORBEILLE";
             if (!is_dir($corbeille_dir)) {
                 mkdir($corbeille_dir, 0755, true);
             }
-            // Générer un nom unique pour éviter les collisions
             $timestamp = date("Ymd_His");
             $corbeille_target = $corbeille_dir . "/" . $ecid . "_" . $timestamp;
-            // Déplacer le dossier existant
             rename($ecid_dir, $corbeille_target);
         }
 
-        // Créer le nouveau dossier ecid
         mkdir($ecid_dir, 0755, true);
 
-        // Déplacer le fichier téléchargé
         $destination = $ecid_dir . "/" . $filename;
         if (move_uploaded_file($uploaded_file, $destination)) {
-            // Si c'est un zip, le décompresser
             $zip = new ZipArchive();
             if ($zip->open($destination) === true) {
                 $zip->extractTo($ecid_dir);
                 $zip->close();
                 unlink($destination);
-                
+
                 $iterator = new RecursiveIteratorIterator(
                     new RecursiveDirectoryIterator($ecid_dir, RecursiveDirectoryIterator::SKIP_DOTS)
                 );
                 foreach ($iterator as $file) {
                     if ($file->isFile()) {
-                        touch($file->getRealPath()); // Sets last modified to current time
+                        touch($file->getRealPath());
                     }
                 }
-                
-                // Log successful upload
+
                 logApiUsage($user, '/upload/zip', 'POST', [
                     'function' => 'uploadZip',
                     'filename' => $filename,
@@ -526,7 +577,7 @@ function uploadZip($user)
                     'ecid' => $ecid,
                     'region' => $region
                 ]);
-                
+
                 sendResponse(200, [
                     "message" => "Fichier ZIP reçu et décompressé avec succès",
                     "url" =>
@@ -541,7 +592,6 @@ function uploadZip($user)
                     "ecid" => $ecid,
                 ]);
             } else {
-                // Log ZIP extraction error
                 logApiUsage($user, '/upload/zip', 'POST', [
                     'function' => 'uploadZip',
                     'filename' => $filename,
@@ -549,14 +599,13 @@ function uploadZip($user)
                     'error' => 'Erreur ouverture ZIP',
                     'ecid' => $ecid
                 ]);
-                
+
                 sendResponse(500, [
                     "error" => true,
                     "message" => "Erreur lors de l'ouverture du fichier zip",
                 ]);
             }
         } else {
-            // Log file move error
             logApiUsage($user, '/upload/zip', 'POST', [
                 'function' => 'uploadZip',
                 'filename' => $filename,
@@ -564,14 +613,13 @@ function uploadZip($user)
                 'error' => 'Échec déplacement fichier',
                 'ecid' => $ecid
             ]);
-            
+
             sendResponse(500, [
                 "error" => true,
                 "message" => "Échec du déplacement du fichier",
             ]);
         }
     } else {
-        // Log upload error
         logApiUsage($user, '/upload/zip', 'POST', [
             'function' => 'uploadZip',
             'filename' => $_FILES["actual_file"]["name"] ?? 'unknown',
@@ -580,7 +628,7 @@ function uploadZip($user)
             'upload_error_code' => $_FILES["actual_file"]["error"],
             'ecid' => $ecid
         ]);
-        
+
         sendResponse(400, [
             "error" => true,
             "message" => "Erreur lors du téléchargement du fichier",
@@ -588,9 +636,8 @@ function uploadZip($user)
     }
 }
 
-function uploadAudit($user = null) // Added user parameter
+function uploadAudit($user = null)
 {
-    // Vérification que les données nécessaires sont présentes
     if (!isset($_POST["region"]) || !isset($_FILES["actual_file"])) {
         logApiUsage($user, '/upload/audit', 'POST', [
             'function' => 'uploadAudit',
@@ -600,54 +647,53 @@ function uploadAudit($user = null) // Added user parameter
         sendResponse(400, ["error" => true, "message" => "Données manquantes"]);
     }
 
-    // Gestion spécifique pour la région UHPA
     if ($_POST["region"] === "UHPA") {
         $_POST["region"] = "STRASBOURG";
     }
 
-    $region = $_POST["region"];
+    $regions = config("regions");
+    $posted_region = strtoupper(trim($_POST["region"]));
+    if (isset($regions[$posted_region])) {
+        $region = $regions[$posted_region];
+    } else {
+        $region = $_POST["region"];
+    }
+
     $region_dir = config("project_root_path") . "/" . $region;
 
-    // Vérifiez que le fichier est bien téléchargé
     if ($_FILES["actual_file"]["error"] === UPLOAD_ERR_OK) {
         $uploaded_file = $_FILES["actual_file"]["tmp_name"];
         $filename = $_FILES["actual_file"]["name"];
         $final_file_path = $region_dir . "/" . $filename;
 
-        // Si le répertoire n'existe pas, utiliser "_Région inconnue"
         if (!is_dir($region_dir)) {
             $region = "_Région inconnue";
             $region_dir = config("project_root_path") . "/" . $region;
             $final_file_path = $region_dir . "/" . $filename;
 
-            // Créer le répertoire si nécessaire
             if (!is_dir($region_dir)) {
                 mkdir($region_dir, 0755, true);
             }
         }
 
-        // Si le fichier existe déjà, le déplacer dans "CORBEILLE"
         if (file_exists($final_file_path)) {
             $corbeille_dir = $region_dir . "/CORBEILLE";
             if (!is_dir($corbeille_dir)) {
                 mkdir($corbeille_dir, 0755, true);
             }
-            // Générer un nom unique pour éviter les collisions
             $timestamp = date("Ymd_His");
             $corbeille_target = $corbeille_dir . "/" . pathinfo($filename, PATHINFO_FILENAME) . "_" . $timestamp . "." . pathinfo($filename, PATHINFO_EXTENSION);
             rename($final_file_path, $corbeille_target);
         }
 
-        // Déplacer le nouveau fichier téléchargé
         if (move_uploaded_file($uploaded_file, $final_file_path)) {
-            // Log successful upload
             logApiUsage($user, '/upload/audit', 'POST', [
                 'function' => 'uploadAudit',
                 'filename' => $filename,
                 'status' => 'SUCCESS',
                 'region' => $region
             ]);
-            
+
             sendResponse(200, [
                 "message" => "Fichier audit reçu avec succès",
                 "url" =>
@@ -661,7 +707,6 @@ function uploadAudit($user = null) // Added user parameter
                 "file" => $filename,
             ]);
         } else {
-            // Log file move error
             logApiUsage($user, '/upload/audit', 'POST', [
                 'function' => 'uploadAudit',
                 'filename' => $filename,
@@ -670,7 +715,7 @@ function uploadAudit($user = null) // Added user parameter
                 'region' => $region,
                 'upload_error_code' => $_FILES["actual_file"]["error"]
             ]);
-            
+
             sendResponse(500, [
                 "error" => true,
                 "message" => "Échec du déplacement du fichier",
@@ -678,7 +723,6 @@ function uploadAudit($user = null) // Added user parameter
             ]);
         }
     } else {
-        // Log upload error
         logApiUsage($user, '/upload/audit', 'POST', [
             'function' => 'uploadAudit',
             'filename' => $_FILES["actual_file"]["name"] ?? 'unknown',
@@ -687,7 +731,7 @@ function uploadAudit($user = null) // Added user parameter
             'region' => $_POST["region"] ?? 'unknown',
             'upload_error_code' => $_FILES["actual_file"]["error"]
         ]);
-        
+
         sendResponse(400, [
             "error" => true,
             "message" => "Erreur lors du téléchargement du fichier",
@@ -762,6 +806,7 @@ function getAppDirectory($appId)
     return $dir;
 }
 
+
 /**
  * Obtenir le chemin du répertoire de stockage des versions d'une application
  * @param string $appId Identifiant de l'application
@@ -775,6 +820,7 @@ function getAppVersionsDirectory($appId)
     }
     return $dir;
 }
+
 
 /**
  * Get app description from config file without authentication
@@ -794,6 +840,7 @@ function getAppDescriptionFromConfig($appName)
     return null;
 }
 
+
 /**
  * Get all app descriptions from config file without authentication
  * @return array Associative array of app names and their descriptions
@@ -811,323 +858,400 @@ function getAllAppDescriptionsFromConfig()
     return $descriptions;
 }
 
+
+ /**
+  * Check if user has access to view an app based on ACL or password
+  * @param string $appId Application identifier
+  * @param array|null $entity Authenticated entity (can be null for anonymous)
+  * @return bool True if user can view the app
+  */
+ function canViewApp($appId, $entity = null)
+ {
+     $apps = config("apps");
+     if (!isset($apps[$appId])) {
+         return false;
+     }
+     
+     $app = $apps[$appId];
+     $visibilityAcl = $app["visibility_acl"] ?? null;
+     $accessPassword = $app["access_password"] ?? null;
+     
+     // If no visibility restriction AND no password, app is public
+     if ($visibilityAcl === null && $accessPassword === null) {
+         return true;
+     }
+     
+     // Check password bypass (if password is set)
+     if ($accessPassword !== null) {
+         $providedPassword = $_GET['app_password'] ?? $_POST['app_password'] ?? null;
+         if ($providedPassword && $providedPassword === $accessPassword) {
+             return true;
+         }
+     }
+     
+     // Check ACL level (if ACL is set)
+     if ($visibilityAcl !== null) {
+         if ($entity && isset($entity["acl"]) && $entity["acl"] >= $visibilityAcl) {
+             return true;
+         }
+     }
+     
+     // If we have password but no ACL, and password didn't match, deny
+     if ($accessPassword !== null && $visibilityAcl === null) {
+         return false;
+     }
+     
+     // If we have ACL but no password, and ACL check failed, deny
+     if ($visibilityAcl !== null && $accessPassword === null) {
+         return false;
+     }
+     
+     // Both are set, neither matched
+     return false;
+ }
+
+/**
+ * Get authenticated entity from current request (if any)
+ * @return array|null Authenticated entity or null
+ */
+function getCurrentAuthEntity()
+{
+    $apiKey = getApiKey();
+    if (!$apiKey) {
+        return null;
+    }
+    
+    return authenticateApiKey($apiKey);
+}
+
+/**
+ * Filter apps list based on visibility ACL and current auth
+ * @param array|null $entity Current authenticated entity
+ * @return array Filtered list of app IDs
+ */
+function getVisibleApps($entity = null)
+{
+    $apps = config("apps");
+    $visibleApps = [];
+    
+    foreach ($apps as $appId => $appInfo) {
+        if (canViewApp($appId, $entity)) {
+            $visibleApps[] = $appId;
+        }
+    }
+    
+    return $visibleApps;
+}
+
+/**
+ * Build URL with app_password parameter if present
+ * @param string $url Base URL
+ * @return string URL with app_password if needed
+ */
+function buildUrlWithPassword($url)
+{
+    $appPassword = $_GET['app_password'] ?? $_POST['app_password'] ?? null;
+    
+    if ($appPassword) {
+        $separator = strpos($url, '?') !== false ? '&' : '?';
+        return $url . $separator . 'app_password=' . urlencode($appPassword);
+    }
+    
+    return $url;
+}
+
 /**
  * Lister toutes les applications disponibles
  */
-function getApps()
-{
-    $appsDirectory = getAppsDirectory();
-    if (!is_dir($appsDirectory)) {
-        sendResponse(200, ["apps" => []]);
-        return;
-    }
-    $apps = [];
-    $items = scandir($appsDirectory);
-    // Get all app descriptions from config
-    $appDescriptions = getAllAppDescriptionsFromConfig();
-    foreach ($items as $item) {
-        // Ignorer "." et ".."
-        if ($item === "." || $item === "..") {
-            continue;
-        }
-        $appDir = $appsDirectory . "/" . $item;
-        if (is_dir($appDir)) {
-            // Lire les informations de base de l'application
-            $appInfo = getAppInfo($item);
-            if ($appInfo) {
-                // Add description from config if available
-                if (isset($appDescriptions[$item])) {
-                    $appInfo["description"] = $appDescriptions[$item];
-                }
+ function getApps()
+ {
+     $appsDirectory = getAppsDirectory();
+     if (!is_dir($appsDirectory)) {
+         sendResponse(200, ["apps" => []]);
+         return;
+     }
+     
+     $entity = getCurrentAuthEntity();
+     
+     $apps = [];
+     $items = scandir($appsDirectory);
+     $appDescriptions = getAllAppDescriptionsFromConfig();
+     
+     foreach ($items as $item) {
+         if ($item === "." || $item === "..") {
+             continue;
+         }
+         
+         $appDir = $appsDirectory . "/" . $item;
+         if (!is_dir($appDir)) {
+             continue;
+         }
+         
+         if (!canViewApp($item, $entity)) {
+             continue;
+         }
+         
+         $appInfo = getAppInfo($item);
+         if ($appInfo) {
+             if (isset($appDescriptions[$item])) {
+                 $appInfo["description"] = $appDescriptions[$item];
+             }
+ 
+             // Build download URL with password if present
+             $baseDownloadUrl = "https://" . config("hostname") . "/api/apps/" . $item . "/download/latest";
+             $appInfo["download_url"] = buildUrlWithPassword($baseDownloadUrl);
+ 
+             $currentVersion = $appInfo["current_version"];
+             $latestFile = resolveVersionFile($item, $currentVersion);
 
-                // Ajouter l'URL de téléchargement pour la dernière version
-                $appInfo["download_url"] =
-                    "https://" .
-                    config("hostname") .
-                    "/api/apps/" .
-                    $item .
-                    "/download/latest";
+             if ($latestFile !== null) {
+                 $appInfo["file_size"] = $latestFile["size"];
+                 $appInfo["file_size_formatted"] = $latestFile["size_formatted"];
+                 $appInfo["file_platform"] = $latestFile["platform"];
+             }
 
-                // Récupérer la taille du fichier de la version actuelle
-                $currentVersion = $appInfo["current_version"];
-                $versionsDir = getAppVersionsDirectory($item);
-
-                if (is_dir($versionsDir)) {
-                    $versionFiles = scandir($versionsDir);
-                    foreach ($versionFiles as $file) {
-                        if (
-                            preg_match(
-                                "/^" .
-                                    preg_quote($currentVersion, "/") .
-                                    '\..*$/',
-                                $file
-                            )
-                        ) {
-                            $filePath = $versionsDir . "/" . $file;
-                            $appInfo["file_size"] = filesize($filePath);
-                            $appInfo["file_size_formatted"] = formatFileSize(
-                                filesize($filePath)
-                            );
-                            break;
-                        }
-                    }
-                }
-
-                $apps[] = $appInfo;
-            }
-        }
-    }
-    sendResponse(200, ["apps" => $apps]);
-}
+             $apps[] = $appInfo;
+         }
+     }
+     
+     sendResponse(200, ["apps" => $apps]);
+ }
 
 /**
  * Afficher la liste de toutes les applications disponibles en format HTML
  */
-function getAppsWeb()
-{
-    $appsDirectory = getAppsDirectory();
-    $apps = [];
-    // Get all app descriptions from config
-    $appDescriptions = getAllAppDescriptionsFromConfig();
-    // Si le répertoire existe, récupérer les applications
-    if (is_dir($appsDirectory)) {
-        $items = scandir($appsDirectory);
-        foreach ($items as $item) {
-            // Ignorer "." et ".."
-            if ($item === "." || $item === "..") {
-                continue;
-            }
-            $appDir = $appsDirectory . "/" . $item;
-            if (is_dir($appDir)) {
-                $appInfo = getAppInfo($item);
-                if ($appInfo) {
-                    if (isset($appDescriptions[$item])) {
-                        $appInfo["description"] = $appDescriptions[$item];
-                    }
+ function getAppsWeb()
+ {
+     $appsDirectory = getAppsDirectory();
+     
+     $entity = getCurrentAuthEntity();
+     
+     $apps = [];
+     $appDescriptions = getAllAppDescriptionsFromConfig();
+     
+     if (is_dir($appsDirectory)) {
+         $items = scandir($appsDirectory);
+         foreach ($items as $item) {
+             if ($item === "." || $item === "..") {
+                 continue;
+             }
+             
+             $appDir = $appsDirectory . "/" . $item;
+             if (!is_dir($appDir)) {
+                 continue;
+             }
+             
+             if (!canViewApp($item, $entity)) {
+                 continue;
+             }
+             
+             $appInfo = getAppInfo($item);
+             if ($appInfo) {
+                 if (isset($appDescriptions[$item])) {
+                     $appInfo["description"] = $appDescriptions[$item];
+                 }
+ 
+                 $currentVersion = $appInfo["current_version"];
+                 $latestFile = resolveVersionFile($item, $currentVersion);
 
-                    // Récupérer la taille du fichier de la version actuelle
-                    $currentVersion = $appInfo["current_version"];
-                    $versionsDir = getAppVersionsDirectory($item);
+                 if ($latestFile !== null) {
+                     $appInfo["file_size"] = $latestFile["size"];
+                     $appInfo["file_size_formatted"] = $latestFile["size_formatted"];
+                     $appInfo["file_platform"] = $latestFile["platform"];
+                 }
 
-                    // Rechercher le fichier de la version actuelle
-                    if (is_dir($versionsDir)) {
-                        $versionFiles = scandir($versionsDir);
-                        foreach ($versionFiles as $file) {
-                            if (
-                                preg_match(
-                                    "/^" .
-                                        preg_quote($currentVersion, "/") .
-                                        '\..*$/',
-                                    $file
-                                )
-                            ) {
-                                $filePath = $versionsDir . "/" . $file;
-                                $appInfo["file_size"] = filesize($filePath);
-                                $appInfo[
-                                    "file_size_formatted"
-                                ] = formatFileSize(filesize($filePath));
-                                break;
-                            }
-                        }
-                    }
-
-                    $apps[] = $appInfo;
-                }
-            }
-        }
-    }
-    // Trier les applications par nom
-    usort($apps, function ($a, $b) {
-        return strcmp($a["name"], $b["name"]);
-    });
-    $appName = config("app_name");
-    // Générer la page HTML
-    $html = <<<HTML
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="robots" content="noindex, nofollow">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Liste des apps — {$appName}</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f6f8fa;
-        }
-        .container {
-            padding: 30px;
-            background-color: #fff;
-            border-radius: 6px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        .page-header {
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #eee;
-        }
-        .page-title {
-            margin: 0;
-            font-size: 28px;
-            color: #24292e;
-        }
-        .apps-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-        }
-        .app-card {
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
-            padding: 20px;
-            background-color: #fff;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .app-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
-        }
-        .app-name {
-            margin-top: 0;
-            margin-bottom: 8px;
-            font-size: 18px;
-            color: #0366d6;
-        }
-        .app-description {
-            color: #586069;
-            margin-bottom: 15px;
-            font-size: 14px;
-            height: 65px;
-            overflow: hidden;
-        }
-        .app-version {
-            font-size: 14px;
-            color: #24292e;
-            margin-bottom: 15px;
-            padding: 4px 8px;
-            background-color: #f1f8ff;
-            border-radius: 3px;
-            display: inline-block;
-        }
-        .app-info {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-bottom: 15px;
-        }
-        .app-date, .app-size {
-            font-size: 12px;
-            color: #6a737d;
-            padding: 3px 6px;
-            background-color: #f6f8fa;
-            border-radius: 3px;
-        }
-        .app-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        .app-button {
-            flex: 1;
-            padding: 8px 12px;
-            text-align: center;
-            border-radius: 4px;
-            text-decoration: none;
-            font-size: 14px;
-            font-weight: 500;
-            transition: background-color 0.2s;
-        }
-        .download-btn {
-            background-color: #2ea44f;
-            color: white;
-        }
-        .download-btn:hover {
-            background-color: #2c974b;
-        }
-        .changelog-btn {
-            background-color: #0366d6;
-            color: white;
-        }
-        .changelog-btn:hover {
-            background-color: #0256b9;
-        }
-        .no-apps {
-            padding: 40px;
-            text-align: center;
-            color: #6a737d;
-            font-style: italic;
-            grid-column: 1 / -1;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="page-header">
-            <h1 class="page-title">Liste des apps • {$appName}</h1>
-        </div>
-        <div class="apps-grid">
-HTML;
-    if (empty($apps)) {
-        $html .=
-            '<div class="no-apps">Aucune application disponible pour le moment.</div>';
-    } else {
-        foreach ($apps as $app) {
-            $updatedDate = date("d/m/Y à H:i", strtotime($app["updated_at"]));
-            $downloadUrl =
-                "https://" .
-                config("hostname") .
-                "/api/apps/" .
-                $app["id"] .
-                "/web/";
-            $changelogUrl =
-                "https://" .
-                config("hostname") .
-                "/api/apps/" .
-                $app["id"] .
-                "/changelog/web";
-
-            // Récupérer la taille du fichier formatée
-            $fileSize = isset($app["file_size_formatted"])
-                ? $app["file_size_formatted"]
-                : "N/A";
-
-            $html .= <<<HTML
-            <div class="app-card">
-                <h2 class="app-name">{$app["name"]}</h2>
-                <div class="app-description">{$app["description"]}</div>
-                <div class="app-version">Version {$app["current_version"]}</div>
-                <div class="app-info">
-                    <span class="app-date"><i class="far fa-calendar-alt"></i> Mise à jour le {$updatedDate}</span>
-                    <span class="app-size"><i class="fas fa-file-archive"></i> {$fileSize}</span>
-                </div>
-                <div class="app-buttons">
-                    <a href="{$downloadUrl}"  target="_blank" class="app-button download-btn">
-                        <i class="fas fa-download"></i> Télécharger
-                    </a>
-                    <a href="{$changelogUrl}" target="_blank" class="app-button changelog-btn">
-                        <i class="fas fa-list"></i> Changelog
-                    </a>
-                </div>
-            </div>
-HTML;
-        }
-    }
-    $html .= <<<HTML
-        </div>
-    </div>
-</body>
-</html>
-HTML;
-    header("Content-Type: text/html; charset=UTF-8");
-    echo $html;
-}
-
+                 $apps[] = $appInfo;
+             }
+         }
+     }
+     
+     usort($apps, function ($a, $b) {
+         return strcmp($a["name"], $b["name"]);
+     });
+     
+     $appName = config("app_name");
+     
+     // Build HTML with password-aware URLs
+     $html = <<<HTML
+ <!DOCTYPE html>
+ <html lang="fr">
+ <head>
+     <meta charset="UTF-8">
+     <meta name="robots" content="noindex, nofollow">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     <title>Liste des apps — {$appName}</title>
+     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+     <style>
+         body {
+             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+             line-height: 1.6;
+             color: #333;
+             max-width: 1200px;
+             margin: 0 auto;
+             padding: 20px;
+             background-color: #f6f8fa;
+         }
+         .container {
+             padding: 30px;
+             background-color: #fff;
+             border-radius: 6px;
+             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+         }
+         .page-header {
+             margin-bottom: 30px;
+             padding-bottom: 20px;
+             border-bottom: 1px solid #eee;
+         }
+         .page-title {
+             margin: 0;
+             font-size: 28px;
+             color: #24292e;
+         }
+         .apps-grid {
+             display: grid;
+             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+             gap: 20px;
+         }
+         .app-card {
+             border: 1px solid #e1e4e8;
+             border-radius: 6px;
+             padding: 20px;
+             background-color: #fff;
+             transition: transform 0.2s, box-shadow 0.2s;
+         }
+         .app-card:hover {
+             transform: translateY(-3px);
+             box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+         }
+         .app-name {
+             margin-top: 0;
+             margin-bottom: 8px;
+             font-size: 18px;
+             color: #0366d6;
+         }
+         .app-description {
+             color: #586069;
+             margin-bottom: 15px;
+             font-size: 14px;
+             height: 90px;
+             overflow: initial;
+         }
+         .app-version {
+             font-size: 14px;
+             color: #24292e;
+             margin-bottom: 15px;
+             padding: 4px 8px;
+             background-color: #f1f8ff;
+             border-radius: 3px;
+             display: inline-block;
+         }
+         .app-info {
+             display: flex;
+             gap: 10px;
+             flex-wrap: wrap;
+             margin-bottom: 15px;
+         }
+         .app-date, .app-size {
+             font-size: 12px;
+             color: #6a737d;
+             padding: 3px 6px;
+             background-color: #f6f8fa;
+             border-radius: 3px;
+         }
+         .app-buttons {
+             display: flex;
+             gap: 10px;
+             margin-top: 15px;
+         }
+         .app-button {
+             flex: 1;
+             padding: 8px 12px;
+             text-align: center;
+             border-radius: 4px;
+             text-decoration: none;
+             font-size: 14px;
+             font-weight: 500;
+             transition: background-color 0.2s;
+         }
+         .download-btn {
+             background-color: #2ea44f;
+             color: white;
+         }
+         .download-btn:hover {
+             background-color: #2c974b;
+         }
+         .changelog-btn {
+             background-color: #0366d6;
+             color: white;
+         }
+         .changelog-btn:hover {
+             background-color: #0256b9;
+         }
+         .no-apps {
+             padding: 40px;
+             text-align: center;
+             color: #6a737d;
+             font-style: italic;
+             grid-column: 1 / -1;
+         }
+     </style>
+ </head>
+ <body>
+     <div class="container">
+         <div class="page-header">
+             <h1 class="page-title">Liste des apps • {$appName}</h1>
+         </div>
+         <div class="apps-grid">
+ HTML;
+ 
+     if (empty($apps)) {
+         $html .= '<div class="no-apps">Aucune application disponible pour le moment.</div>';
+     } else {
+         foreach ($apps as $app) {
+             $updatedDate = date("d/m/Y à H:i", strtotime($app["updated_at"]));
+             
+             // Build URLs with password
+             $baseDownloadUrl = "https://" . config("hostname") . "/api/apps/" . $app["id"] . "/web/";
+             $downloadUrl = buildUrlWithPassword($baseDownloadUrl);
+             
+             $baseChangelogUrl = "https://" . config("hostname") . "/api/apps/" . $app["id"] . "/changelog/web";
+             $changelogUrl = buildUrlWithPassword($baseChangelogUrl);
+ 
+             $fileSize = isset($app["file_size_formatted"]) ? $app["file_size_formatted"] : "N/A";
+ 
+             $html .= <<<HTML
+             <div class="app-card">
+                 <h2 class="app-name">{$app["name"]}</h2>
+                 <div class="app-description">{$app["description"]}</div>
+                 <div class="app-version">Version {$app["current_version"]}</div>
+                 <div class="app-info">
+                     <span class="app-date"><i class="far fa-calendar-alt"></i> Mise à jour le {$updatedDate}</span>
+                     <span class="app-size"><i class="fas fa-file-archive"></i> {$fileSize}</span>
+                 </div>
+                 <div class="app-buttons">
+                     <a href="{$downloadUrl}" target="_blank" class="app-button download-btn">
+                         <i class="fas fa-download"></i> Télécharger
+                     </a>
+                     <a href="{$changelogUrl}" target="_blank" class="app-button changelog-btn">
+                         <i class="fas fa-list"></i> Changelog
+                     </a>
+                 </div>
+             </div>
+ HTML;
+         }
+     }
+ 
+     $html .= <<<HTML
+         </div>
+     </div>
+ </body>
+ </html>
+ HTML;
+ 
+     header("Content-Type: text/html; charset=UTF-8");
+     echo $html;
+ }
+ 
 /**
  * Obtenir les informations d'une application spécifique
  * @param string $appId Identifiant de l'application
@@ -1182,252 +1306,664 @@ function getAppInfo($appId)
 }
 
 /**
- * Lister toutes les versions d'une application
- * @param string $appId Identifiant de l'application
+ * Get supported platforms
  */
-function getAppVersions($appId)
+function getSupportedPlatforms()
 {
-    // Vérifier que l'application existe
-    $appExist = isAppExisting($appId);
-    if (!$appExist) {
-        sendResponse(404, [
-            "error" => true,
-            "message" => "Application non trouvée",
-        ]);
-        return;
+    return [
+        'windows' => [
+            'name' => 'Windows',
+            'extensions' => ['exe', 'msi', '7z'],
+            'icon' => 'fab fa-windows'
+        ],
+        'macos' => [
+            'name' => 'macOS (Apple Silicon)',
+            'extensions' => ['dmg', 'pkg', 'app.zip'],
+            'icon' => 'fab fa-apple'
+        ],
+        'macos-x64' => [
+            'name' => 'macOS (Intel)',
+            'extensions' => ['dmg', 'pkg', 'app.zip', 'tar.gz', 'tgz'],
+            'icon' => 'fab fa-apple'
+        ],
+        'linux' => [
+            'name' => 'Linux',
+            'extensions' => ['AppImage', 'deb', 'rpm', 'tgz', 'tar.gz'],
+            'icon' => 'fab fa-linux'
+        ]
+    ];
+}
+
+/**
+ * Detect platform from filename
+ * @param string $filename
+ * @return string|null Platform identifier or null
+ */
+function detectPlatformFromFilename($filename)
+{
+    $platforms = getSupportedPlatforms();
+    $lowerFilename = strtolower($filename);
+    
+    // Detect platform from filename suffix (no extension binaries)
+    if (str_contains($lowerFilename, '-linux')) {
+        return 'linux';
     }
-    $appInfo = getAppInfo($appId);
-    $currentVersion = $appInfo["current_version"];
+    if (str_contains($lowerFilename, '-windows') || str_contains($lowerFilename, '-win')) {
+        return 'windows';
+    }
+    // macos-x64 must be checked BEFORE the generic -macos/-mac suffix
+    if (
+        str_contains($lowerFilename, '-macos-x64') ||
+        str_contains($lowerFilename, '-macos-x86_64') ||
+        str_contains($lowerFilename, '-macos-intel') ||
+        str_contains($lowerFilename, '-mac-intel') ||
+        str_contains($lowerFilename, '-darwin-x64') ||
+        str_contains($lowerFilename, '-macosx64')
+    ) {
+        return 'macos-x64';
+    }
+    if (str_contains($lowerFilename, '-macos') || str_contains($lowerFilename, '-mac')) {
+        return 'macos';
+    }
+    
+    // macOS builds with an arch suffix (x64 / amd64 / x86_64) -> macos-x64
+    // (ex: myapp-1.2.3-x64.app.zip, myapp_x64.dmg, myapp-amd64.pkg)
+    $hasMacosArchMarker =
+        str_contains($lowerFilename, '-x64') ||
+        str_contains($lowerFilename, '_x64') ||
+        str_contains($lowerFilename, '-x86_64') ||
+        str_contains($lowerFilename, '-amd64');
+    if ($hasMacosArchMarker) {
+        foreach (['app.zip', 'dmg', 'pkg'] as $macosExt) {
+            if (str_ends_with($lowerFilename, '.' . $macosExt)) {
+                return 'macos-x64';
+            }
+        }
+    }
+    
+    // Fallback: detect from extension
+    foreach ($platforms as $platformId => $platformInfo) {
+        foreach ($platformInfo['extensions'] as $ext) {
+            if (str_ends_with($lowerFilename, '.' . strtolower($ext))) {
+                return $platformId;
+            }
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * Check if version uses new multi-platform structure
+ * @param string $appId
+ * @param string $version
+ * @return bool
+ */
+function isMultiPlatformVersion($appId, $version)
+{
     $versionsDir = getAppVersionsDirectory($appId);
-    $versions = [];
-    // Si le répertoire existe, lister les versions
-    if (is_dir($versionsDir)) {
-        $items = scandir($versionsDir);
-        foreach ($items as $item) {
-            // Ignorer "." et ".." et les fichiers qui ne sont pas des binaires
-            if (
-                $item === "." ||
-                $item === ".." ||
-                !preg_match('/^([0-9]+\.[0-9]+\.[0-9]+)\..*$/', $item, $matches)
-            ) {
-                continue;
-            }
-            $version = $matches[1];
-            $versionFile = $versionsDir . "/" . $item;
+    $versionDir = $versionsDir . '/' . $version;
+    
+    return is_dir($versionDir);
+}
 
-            // Créer l'entrée de version avec tous les détails
-            $versionEntry = [
-                "version" => $version,
-                "filename" => $item,
-                "final_filename" => $appId . "-" . $item,
-                "size" => filesize($versionFile),
-                "size_formatted" => formatFileSize(filesize($versionFile)),
-                "uploaded_at" => date("Y-m-d H:i:s", filemtime($versionFile)),
-                "download_url" =>
-                    "https://" .
-                    config("hostname") .
-                    "/api/apps/" .
-                    $appId .
-                    "/download/" .
-                    $version,
+/**
+ * Get version files (handles both old and new format)
+ * @param string $appId
+ * @param string $version
+ * @return array Array of files with platform info
+ */
+function getVersionFiles($appId, $version)
+{
+    $versionsDir = getAppVersionsDirectory($appId);
+    $files = [];
+
+    $forcedPlatformApps = [
+        'emcotech'    => 'windows',
+        'jeanjacques' => 'windows',
+        'linux-hdf'   => 'linux',
+        'linuxold'    => 'linux',
+        'linux'       => 'linux',
+    ];
+
+    $forcedPlatform = $forcedPlatformApps[$appId] ?? null;
+
+    if (isMultiPlatformVersion($appId, $version)) {
+        $versionDir = $versionsDir . '/' . $version;
+        foreach (scandir($versionDir) as $item) {
+            if ($item === '.' || $item === '..') continue;
+            $filePath = $versionDir . '/' . $item;
+            if (is_file($filePath)) {
+                $files[] = [
+                    'filename'       => $item,
+                    'path'           => $filePath,
+                    'platform'       => $forcedPlatform ?? detectPlatformFromFilename($item),
+                    'size'           => filesize($filePath),
+                    'size_formatted' => formatFileSize(filesize($filePath)),
+                ];
+            }
+        }
+    } else {
+        foreach (glob($versionsDir . '/' . $version . '.*') as $filePath) {
+            $filename = basename($filePath);
+            $files[] = [
+                'filename'       => $filename,
+                'path'           => $filePath,
+                'platform'       => $forcedPlatform ?? detectPlatformFromFilename($filename),
+                'size'           => filesize($filePath),
+                'size_formatted' => formatFileSize(filesize($filePath)),
             ];
-
-            // Ajouter is_latest = true si c'est la version courante
-            if ($version === $currentVersion) {
-                $versionEntry["is_latest"] = true;
-            } else {
-                $versionEntry["is_latest"] = false;
-            }
-
-            $versions[] = $versionEntry;
         }
     }
 
-    // Retourner les versions
-    sendResponse(200, [
-        "error" => false,
-        "versions" => $versions,
-    ]);
+    return $files;
+}
+
+/**
+ * Obtenir la plateforme demandée via le paramètre ?platform=...
+ * @return string|null
+ */
+function getRequestedPlatform()
+{
+    if (!isset($_GET['platform'])) {
+        return null;
+    }
+
+    $platform = trim((string) $_GET['platform']);
+
+    return $platform === '' ? null : $platform;
+}
+
+/**
+ * Résoudre le fichier correspondant à une version.
+ * Gère l'ancien format plat (versions/1.2.3.zip) ainsi que le nouveau
+ * format multi-plateformes (versions/1.2.3/<fichier>).
+ * @param string $appId Identifiant de l'application
+ * @param string $version Numéro de version
+ * @param string|null $platform Plateforme souhaitée (optionnelle)
+ * @return array|null Fichier résolu (filename, path, platform, size, ...)
+ */
+function resolveVersionFile($appId, $version, $platform = null)
+{
+    if (!is_string($version) || $version === '') {
+        return null;
+    }
+
+    $files = getVersionFiles($appId, $version);
+
+    if (empty($files)) {
+        return null;
+    }
+
+    if ($platform !== null && $platform !== '') {
+        foreach ($files as $file) {
+            if ($file['platform'] === $platform) {
+                return $file;
+            }
+        }
+
+        return null;
+    }
+
+    if (count($files) === 1) {
+        return $files[0];
+    }
+
+    // Plusieurs plateformes : ordre stable, identique à la page web
+    $platformOrder = [
+        'windows' => 0,
+        'macos' => 1,
+        'macos-x64' => 2,
+        'linux' => 3,
+    ];
+
+    usort($files, function ($a, $b) use ($platformOrder) {
+        $orderA = $platformOrder[$a['platform']] ?? 99;
+        $orderB = $platformOrder[$b['platform']] ?? 99;
+
+        if ($orderA !== $orderB) {
+            return $orderA <=> $orderB;
+        }
+
+        return strcmp($a['filename'], $b['filename']);
+    });
+
+    return $files[0];
+}
+
+/**
+ * Construire le nom de fichier proposé au téléchargement.
+ * Évite de préfixer deux fois avec l'identifiant de l'application
+ * (les fichiers du format multi-plateformes contiennent déjà son nom).
+ * @param string $appId Identifiant de l'application
+ * @param string $filename Nom du fichier stocké
+ * @return string
+ */
+function buildDownloadFilename($appId, $filename)
+{
+    $pattern = '/(^|[-_.])' . preg_quote($appId, '/') . '([-_.]|$)/i';
+
+    if (preg_match($pattern, $filename)) {
+        return $filename;
+    }
+
+    return $appId . '-' . $filename;
+}
+
+/**
+ * Lister toutes les versions d'une application
+ * @param string $appId Identifiant de l'application
+ */
+ function getAppVersions($appId)
+ {
+     $entity = getCurrentAuthEntity();
+     if (!canViewApp($appId, $entity)) {
+         sendResponse(403, [
+             "error" => true,
+             "message" => "Accès refusé à cette application",
+         ]);
+         return;
+     }
+ 
+     $appExist = isAppExisting($appId);
+     if (!$appExist) {
+         sendResponse(404, [
+             "error" => true,
+             "message" => "Application non trouvée",
+         ]);
+         return;
+     }
+     
+     $appInfo = getAppInfo($appId);
+     $currentVersion = $appInfo["current_version"];
+     $versionsDir = getAppVersionsDirectory($appId);
+     $versionsMap = []; // Group by version number
+     
+     if (!is_dir($versionsDir)) {
+         sendResponse(200, ["error" => false, "versions" => []]);
+         return;
+     }
+     
+     $items = scandir($versionsDir);
+     
+     foreach ($items as $item) {
+         if ($item === "." || $item === "..") {
+             continue;
+         }
+         
+         $itemPath = $versionsDir . '/' . $item;
+         
+         // New format: directory with version number
+         if (is_dir($itemPath) && preg_match('/^([0-9]+\.[0-9]+\.[0-9]+)$/', $item, $matches)) {
+             $version = $matches[1];
+             
+             $files = getVersionFiles($appId, $version);
+             if (empty($files)) {
+                 continue;
+             }
+             
+             // Initialize version entry if not exists
+             if (!isset($versionsMap[$version])) {
+                 $versionsMap[$version] = [
+                     'version' => $version,
+                     'uploaded_at' => date("Y-m-d H:i:s", filemtime($itemPath)),
+                     'is_latest' => $version === $currentVersion,
+                     'platforms' => []
+                 ];
+             }
+             
+             // Add each platform to this version
+             foreach ($files as $file) {
+                 $platformId = $file['platform'] ?? 'unknown';
+                 $platforms = getSupportedPlatforms();
+                 $platformName = $platforms[$platformId]['name'] ?? ucfirst($platformId);
+                 
+                 $versionsMap[$version]['platforms'][] = [
+                     'platform' => $platformId,
+                     'platform_name' => $platformName,
+                     'filename' => $file['filename'],
+                     'size' => $file['size'],
+                     'size_formatted' => $file['size_formatted'],
+                     'download_url' => "https://" . config("hostname") . "/api/apps/" . $appId . "/download/" . $version . "/" . $platformId
+                 ];
+             }
+         }
+         // Old format: version.extension file
+         elseif (is_file($itemPath) && preg_match('/^([0-9]+\.[0-9]+\.[0-9]+)\..*$/', $item, $matches)) {
+             $version = $matches[1];
+             
+             if (isset($versionsMap[$version])) {
+                 continue;
+             }
+             
+             $files = getVersionFiles($appId, $version);
+             $file = $files[0] ?? null;
+             
+             if (!$file) {
+                 continue;
+             }
+             
+             $platformId = $file['platform'] ?? 'unknown';
+             $platforms = getSupportedPlatforms();
+             $platformName = $platforms[$platformId]['name'] ?? ucfirst($platformId);
+             
+             $versionsMap[$version] = [
+                 'version' => $version,
+                 'uploaded_at' => date("Y-m-d H:i:s", filemtime($itemPath)),
+                 'is_latest' => $version === $currentVersion,
+                 'platforms' => [
+                     [
+                         'platform' => $platformId,
+                         'platform_name' => $platformName,
+                         'filename' => $file['filename'],
+                         'size' => $file['size'],
+                         'size_formatted' => $file['size_formatted'],
+                         'download_url' => "https://" . config("hostname") . "/api/apps/" . $appId . "/download/" . $version
+                     ]
+                 ]
+             ];
+         }
+     }
+     
+     // Convert map to array and sort by version
+     $versions = array_values($versionsMap);
+     usort($versions, function ($a, $b) {
+         return version_compare($b["version"], $a["version"]);
+     });
+     
+     sendResponse(200, ["error" => false, "versions" => $versions]);
 }
 
 /**
  * Obtenir la liste des versions d'une application en format HTML
  * @param string $appId Identifiant de l'application
  */
-function getAppVersionsWeb($appId)
-{
-    $appExist = isAppExisting($appId);
-    if (!$appExist) {
-        sendResponse(404, [
-            "error" => true,
-            "message" => "Application non trouvée",
-        ]);
-        return;
-    }
-    $appInfo = getAppInfo($appId);
-    $currentVersion = $appInfo["current_version"];
-    $versionsDir = getAppVersionsDirectory($appId);
-    $versions = [];
+ function getAppVersionsWeb($appId)
+ {
+     $entity = getCurrentAuthEntity();
+     if (!canViewApp($appId, $entity)) {
+         sendResponse(403, [
+             "error" => true,
+             "message" => "Accès refusé à cette application",
+         ]);
+         return;
+     }
+ 
+     $appExist = isAppExisting($appId);
+     if (!$appExist) {
+         sendResponse(404, [
+             "error" => true,
+             "message" => "Application non trouvée",
+         ]);
+         return;
+     }
+     
+     $appInfo = getAppInfo($appId);
+     $currentVersion = $appInfo["current_version"];
+     $versionsDir = getAppVersionsDirectory($appId);
+     $versions = [];
+     $processedVersions = [];
+ 
+     if (is_dir($versionsDir)) {
+         $items = scandir($versionsDir);
+         
+         foreach ($items as $item) {
+             if ($item === "." || $item === "..") {
+                 continue;
+             }
+             
+             $itemPath = $versionsDir . '/' . $item;
+             
+             // New format: directory with version number
+             if (is_dir($itemPath) && preg_match('/^([0-9]+\.[0-9]+\.[0-9]+)$/', $item)) {
+                 $version = $item;
+                 if (isset($processedVersions[$version])) {
+                     continue;
+                 }
+                 
+                 $files = getVersionFiles($appId, $version);
+                 if (empty($files)) {
+                     continue;
+                 }
+                 
+                 // Create separate entry for each platform
+                 foreach ($files as $file) {
+                     $platformId = $file['platform'] ?? 'unknown';
+                     $platforms = getSupportedPlatforms();
+                     $platformName = $platforms[$platformId]['name'] ?? ucfirst($platformId);
+                     
+                     $versions[] = [
+                         'version' => $version,
+                         'format' => 'new',
+                         'platform' => $platformId,
+                         'platform_name' => $platformName,
+                         'filename' => $file['filename'],
+                         'size' => $file['size'],
+                         'size_formatted' => $file['size_formatted'],
+                         'uploaded_at' => date("Y-m-d H:i:s", filemtime($file['path'])),
+                         'is_latest' => $version === $currentVersion,
+                         'download_url' => "https://" . config("hostname") . "/api/apps/" . $appId . "/download/" . $version . "/" . $platformId
+                     ];
+                 }
+                 
+                 $processedVersions[$version] = true;
+             }
+             // Old format: version.extension file
+             elseif (is_file($itemPath) && preg_match('/^([0-9]+\.[0-9]+\.[0-9]+)\..*$/', $item, $matches)) {
+                 $version = $matches[1];
+                 if (isset($processedVersions[$version])) {
+                     continue;
+                 }
+                 
+                 $files = getVersionFiles($appId, $version);
+                 $file = $files[0] ?? null;
+                 
+                 if (!$file) {
+                     continue;
+                 }
+                 
+                 $platformId = $file['platform'] ?? 'unknown';
+                 $platforms = getSupportedPlatforms();
+                 $platformName = $platforms[$platformId]['name'] ?? ucfirst($platformId);
+                 
+                 $versions[] = [
+                     'version' => $version,
+                     'format' => 'legacy',
+                     'platform' => $platformId,
+                     'platform_name' => $platformName,
+                     'filename' => $file['filename'],
+                     'size' => $file['size'],
+                     'size_formatted' => $file['size_formatted'],
+                     'uploaded_at' => date("Y-m-d H:i:s", filemtime($file['path'])),
+                     'is_latest' => $version === $currentVersion,
+                     'download_url' => "https://" . config("hostname") . "/api/apps/" . $appId . "/download/" . $version
+                 ];
+                 
+                 $processedVersions[$version] = true;
+             }
+         }
+     }
+ 
+     // Sort by version (newest first), then order platforms so macOS tags are adjacent
+     $platformOrder = [
+         'windows' => 0,
+         'macos' => 1,
+         'macos-x64' => 2,
+         'linux' => 3,
+         'unknown' => 4,
+     ];
+     usort($versions, function ($a, $b) use ($platformOrder) {
+         $cmp = version_compare($b["version"], $a["version"]);
+         if ($cmp !== 0) {
+             return $cmp;
+         }
+         $oa = $platformOrder[$a["platform"]] ?? 99;
+         $ob = $platformOrder[$b["platform"]] ?? 99;
+         return $oa <=> $ob;
+     });
 
-    // Si le répertoire existe, lister les versions
-    if (is_dir($versionsDir)) {
-        $items = scandir($versionsDir);
-        foreach ($items as $item) {
-            // Ignorer "." et ".." et les fichiers qui ne sont pas des binaires
-            if (
-                $item === "." ||
-                $item === ".." ||
-                !preg_match('/^([0-9]+\.[0-9]+\.[0-9]+)\..*$/', $item, $matches)
-            ) {
-                continue;
-            }
-            $version = $matches[1];
-            $versionFile = $versionsDir . "/" . $item;
-            // Créer l'entrée de version avec tous les détails
-            $versionEntry = [
-                "version" => $version,
-                "filename" => $item,
-                "final_filename" => $appId . "-" . $item,
-                "size" => filesize($versionFile),
-                "size_formatted" => formatFileSize(filesize($versionFile)),
-                "uploaded_at" => date("Y-m-d H:i:s", filemtime($versionFile)),
-                "download_url" =>
-                    "https://" .
-                    config("hostname") .
-                    "/api/apps/" .
-                    $appId .
-                    "/download/" .
-                    $version,
-                "is_latest" => $version === $currentVersion,
-            ];
-            $versions[] = $versionEntry;
-        }
-    }
-
-    // Trier les versions par date (plus récent en premier)
-    usort($versions, function ($a, $b) {
-        return strtotime($b["uploaded_at"]) - strtotime($a["uploaded_at"]);
-    });
-
-    $changelog_url =
-        "https://" . config("hostname") . "/api/apps/{$appId}/changelog/web";
-
-    // Générer la page HTML
-    $html = <<<HTML
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="robots" content="noindex, nofollow">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Versions - {$appInfo["name"]}</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 980px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f6f8fa;
-        }
-        .container {
-            padding: 30px;
-            background-color: #fff;
-            border-radius: 6px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        .app-header {
-            margin-bottom: 20px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #eee;
-        }
-        .app-title {
-            margin: 0;
-            font-size: 24px;
-        }
-        .app-version {
-            color: #666;
-            font-size: 16px;
-            margin-top: 5px;
-        }
-        .version-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        .version-table th, .version-table td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #eee;
-        }
-        .version-table th {
-            background-color: #f8f9fa;
-            font-weight: 600;
-        }
-        .version-latest {
-            background-color: #e8f5e9;
-        }
-        .badge-latest {
-            display: inline-block;
-            padding: 3px 8px;
-            font-size: 12px;
-            font-weight: 600;
-            color: white;
-            background-color: #28a745;
-            border-radius: 12px;
-            margin-left: 8px;
-        }
-        .download-btn {
-            display: inline-block;
-            padding: 5px 10px;
-            background-color: #0366d6;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .download-btn:hover {
-            background-color: #0256b9;
-        }
-        .no-versions {
-            padding: 30px;
-            text-align: center;
-            color: #666;
-            font-style: italic;
-        }
-        .app-changelog a {
-            background-color: transparent;
-            color: color(srgb 0.0382 0.4103 0.8567);
-            text-decoration: none;
-        }
-        .app-changelog a:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="app-header">
-            <h1 class="app-title">{$appInfo["name"]}</h1>
-            <div class="app-version">Version actuelle: {$appInfo["current_version"]}</div>
-            <div class="app-changelog"><a href='{$changelog_url}'>Voir le changelog</a></div>
-        </div>
-
-        <h2>Historique des versions</h2>
-
-HTML;
-
-    if (empty($versions)) {
-        $html .=
-            '<div class="no-versions">Aucune version disponible pour cette application.</div>';
-    } else {
-        $html .= <<<HTML
-        <table class="version-table">
-            <thead>
-                <tr>
-                    <th>Version</th>
+     // Oldest (first) upload date per version, used for the version header "Publiée le"
+     $oldestDateByVersion = [];
+     foreach ($versions as $v) {
+         $ts = strtotime($v['uploaded_at']);
+         if (!isset($oldestDateByVersion[$v['version']]) || $ts < $oldestDateByVersion[$v['version']]) {
+             $oldestDateByVersion[$v['version']] = $ts;
+         }
+     }
+ 
+     $baseVersionsUrl = "https://" . config("hostname") . "/api/apps/{$appId}/web";
+     $versions_url = buildUrlWithPassword($baseVersionsUrl);
+     
+     $baseChangelogUrl = "https://" . config("hostname") . "/api/apps/{$appId}/changelog/web";
+     $changelog_url = buildUrlWithPassword($baseChangelogUrl);
+ 
+     // Generate HTML
+     $html = <<<HTML
+ <!DOCTYPE html>
+ <html lang="fr">
+ <head>
+     <meta charset="UTF-8">
+     <meta name="robots" content="noindex, nofollow">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     <title>Versions - {$appInfo["name"]}</title>
+     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+     <style>
+         body {
+             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+             line-height: 1.6;
+             color: #333;
+             max-width: 980px;
+             margin: 0 auto;
+             padding: 20px;
+             background-color: #f6f8fa;
+         }
+         .container {
+             padding: 30px;
+             background-color: #fff;
+             border-radius: 6px;
+             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+         }
+         .app-header {
+             margin-bottom: 20px;
+             padding-bottom: 20px;
+             border-bottom: 1px solid #eee;
+         }
+         .app-title {
+             margin: 0;
+             font-size: 24px;
+         }
+         .app-version {
+             color: #666;
+             font-size: 16px;
+             margin-top: 5px;
+         }
+         .version-table {
+             width: 100%;
+             border-collapse: collapse;
+             margin-top: 20px;
+         }
+         .version-table th, .version-table td {
+             padding: 12px 15px;
+             text-align: left;
+             border-bottom: 1px solid #eee;
+         }
+         .version-table th {
+             background-color: #f8f9fa;
+             font-weight: 600;
+         }
+         .version-latest {
+             background-color: #e8f5e9;
+         }
+         /* Version group header + separator between versions */
+         .version-group-header td {
+             background-color: #eef1f4;
+             padding: 8px 15px;
+             border-bottom: 1px solid #d0d7de;
+         }
+         .version-group-header:not(:first-child) td {
+             border-top: 3px solid #c8d1da;
+         }
+         .version-number {
+             font-size: 15px;
+             font-weight: 700;
+             color: #24292e;
+         }
+         .version-group-date {
+             font-size: 12px;
+             font-weight: 400;
+             color: #6a737d;
+             margin-left: 10px;
+         }
+         .badge-latest {
+             display: inline-block;
+             padding: 3px 8px;
+             font-size: 12px;
+             font-weight: 600;
+             color: white;
+             background-color: #28a745;
+             border-radius: 12px;
+             margin-left: 8px;
+         }
+         .badge-platform {
+             display: inline-block;
+             padding: 3px 8px;
+             font-size: 11px;
+             font-weight: 600;
+             color: white;
+             border-radius: 12px;
+         }
+         .platform-windows { background-color: #0078d4; }
+         .platform-macos { background-color: #000000; }
+         .platform-macos-x64 { background-color: #6c5ce7; }
+         .platform-linux { background-color: #f7941e; }
+         .platform-unknown { background-color: #6c757d; }
+         .download-btn {
+             display: inline-block;
+             padding: 5px 10px;
+             background-color: #0366d6;
+             color: white;
+             text-decoration: none;
+             border-radius: 4px;
+             font-size: 14px;
+         }
+         .download-btn:hover {
+             background-color: #0256b9;
+         }
+         .no-versions {
+             padding: 30px;
+             text-align: center;
+             color: #666;
+             font-style: italic;
+         }
+         .app-changelog a {
+             background-color: transparent;
+             color: color(srgb 0.0382 0.4103 0.8567);
+             text-decoration: none;
+         }
+         .app-changelog a:hover {
+             text-decoration: underline;
+         }
+     </style>
+ </head>
+ <body>
+     <div class="container">
+         <div class="app-header">
+             <h1 class="app-title">{$appInfo["name"]}</h1>
+             <div class="app-version">Version actuelle: {$appInfo["current_version"]}</div>
+             <div class="app-changelog"><a href='{$changelog_url}'>Voir le changelog</a></div>
+         </div>
+ 
+         <h2>Historique des versions</h2>
+ HTML;
+ 
+     if (empty($versions)) {
+         $html .= '<div class="no-versions">Aucune version disponible pour cette application.</div>';
+     } else {
+         $html .= <<<HTML
+         <table class="version-table">
+             <thead>
+                 <tr>
+                    <th>Plateforme</th>
                     <th>Date de publication</th>
                     <th>Taille</th>
                     <th>Action</th>
@@ -1436,56 +1972,80 @@ HTML;
             <tbody>
 HTML;
 
+        $lastVersion = null;
         foreach ($versions as $version) {
-            $latestClass = $version["is_latest"]
-                ? ' class="version-latest"'
-                : "";
-            $latestBadge = $version["is_latest"]
-                ? '<span class="badge-latest">ACTUELLE</span>'
-                : "";
+            // Version group header (shown once per version number)
+            if ($version["version"] !== $lastVersion) {
+                $lastVersion = $version["version"];
+                $latestBadge = $version["is_latest"] ? '<span class="badge-latest">ACTUELLE</span>' : "";
+                $publishedDate = formatHumanDateTime($oldestDateByVersion[$version["version"]] ?? strtotime($version["uploaded_at"]));
+                $html .= <<<HTML
+                <tr class="version-group-header">
+                    <td colspan="4">
+                        <span class="version-number">Version {$version["version"]}</span>{$latestBadge}
+                        <span class="version-group-date">Publiée le {$publishedDate}</span>
+                    </td>
+                </tr>
+HTML;
+            }
+            
+            $latestClass = $version["is_latest"] ? ' class="version-latest"' : "";
+            
+            $platformClass = 'platform-' . strtolower($version['platform']);
+            $platformBadge = '<span class="badge-platform ' . $platformClass . '">' . $version['platform_name'] . '</span>';
+            
+            $downloadUrl = buildUrlWithPassword($version["download_url"]);
+            $uploadedHuman = formatHumanDateTime(strtotime($version["uploaded_at"]));
 
             $html .= <<<HTML
                 <tr{$latestClass}>
-                    <td>{$version["version"]}{$latestBadge}</td>
-                    <td>{$version["uploaded_at"]}</td>
+                    <td>{$platformBadge}</td>
+                    <td>{$uploadedHuman}</td>
                     <td>{$version["size_formatted"]}</td>
                     <td>
-                        <a href="{$version["download_url"]}" class="download-btn">
+                        <a href="{$downloadUrl}" class="download-btn">
                             <i class="fas fa-download"></i> Télécharger
                         </a>
                     </td>
                 </tr>
 HTML;
-        }
-
-        $html .= <<<HTML
-            </tbody>
-        </table>
-HTML;
-    }
-
-    $html .= <<<HTML
-    </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Tout code JavaScript supplémentaire peut être ajouté ici
-        });
-    </script>
-</body>
-</html>
-HTML;
-
-    header("Content-Type: text/html; charset=UTF-8");
-    echo $html;
-}
-
+         }
+ 
+         $html .= <<<HTML
+             </tbody>
+         </table>
+ HTML;
+     }
+ 
+     $html .= <<<HTML
+     </div>
+ </body>
+ </html>
+ HTML;
+ 
+     header("Content-Type: text/html; charset=UTF-8");
+     echo $html;
+ }
+ 
+ 
 /**
  * Obtenir la dernière version d'une application
  * @param string $appId Identifiant de l'application
  */
 function getLatestAppVersion($appId)
 {
+    // Get current auth entity
+    $entity = getCurrentAuthEntity();
+    
+    // Check visibility access
+    if (!canViewApp($appId, $entity)) {
+        sendResponse(403, [
+            "error" => true,
+            "message" => "Accès refusé à cette application",
+        ]);
+        return;
+    }
+    
     // Vérifier que l'application existe
     $appExist = isAppExisting($appId);
     if (!$appExist) {
@@ -1499,36 +2059,75 @@ function getLatestAppVersion($appId)
     $appInfo = getAppInfo($appId);
 
     $currentVersion = $appInfo["current_version"];
-    $versionsDir = getAppVersionsDirectory($appId);
+    $requestedPlatform = getRequestedPlatform();
+    $versionFiles = getVersionFiles($appId, $currentVersion);
+    $latestVersionFile = resolveVersionFile(
+        $appId,
+        $currentVersion,
+        $requestedPlatform
+    );
 
-    // Chercher le fichier correspondant à la dernière version
-    $latestVersionFiles = glob($versionsDir . "/" . $currentVersion . ".*");
-
-    if (empty($latestVersionFiles)) {
+    if ($latestVersionFile === null) {
         sendResponse(404, [
             "error" => true,
-            "message" => "Aucun fichier trouvé pour la dernière version",
+            "message" =>
+                $requestedPlatform === null
+                    ? "Aucun fichier trouvé pour la dernière version"
+                    : "Aucun fichier trouvé pour la dernière version sur la plateforme demandée",
         ]);
         return;
     }
 
-    $latestVersionFile = $latestVersionFiles[0];
-    $filename = basename($latestVersionFile);
+    $filename = $latestVersionFile["filename"];
+    $platforms = getSupportedPlatforms();
+    $platformId = $latestVersionFile["platform"] ?? "unknown";
+
+    // Liste des plateformes disponibles pour cette version
+    $availablePlatforms = [];
+    foreach ($versionFiles as $file) {
+        $filePlatformId = $file["platform"] ?? "unknown";
+        $availablePlatforms[] = [
+            "platform" => $filePlatformId,
+            "platform_name" =>
+                $platforms[$filePlatformId]["name"] ??
+                ucfirst($filePlatformId),
+            "filename" => $file["filename"],
+            "size" => $file["size"],
+            "size_formatted" => $file["size_formatted"],
+            "download_url" => buildUrlWithPassword(
+                "https://" .
+                    config("hostname") .
+                    "/api/apps/" .
+                    $appId .
+                    "/download/latest?platform=" .
+                    urlencode($filePlatformId)
+            ),
+        ];
+    }
 
     sendResponse(200, [
         "app" => $appInfo,
         "version" => $currentVersion,
+        "platform" => $platformId,
+        "platform_name" =>
+            $platforms[$platformId]["name"] ?? ucfirst($platformId),
         "filename" => $filename,
-        "final_filename" => $appId . "-" . $filename,
-        "size" => filesize($latestVersionFile),
-        "size_formatted" => formatFileSize(filesize($latestVersionFile)),
-        "uploaded_at" => date("Y-m-d H:i:s", filemtime($latestVersionFile)),
-        "download_url" =>
+        "final_filename" => buildDownloadFilename($appId, $filename),
+        "size" => $latestVersionFile["size"],
+        "size_formatted" => $latestVersionFile["size_formatted"],
+        "uploaded_at" => date(
+            "Y-m-d H:i:s",
+            filemtime($latestVersionFile["path"])
+        ),
+        "download_url" => buildUrlWithPassword(
             "https://" .
-            config("hostname") .
-            "/api/apps/" .
-            $appId .
-            "/download/latest",
+                config("hostname") .
+                "/api/apps/" .
+                $appId .
+                "/download/latest?platform=" .
+                urlencode($platformId)
+        ),
+        "platforms" => $availablePlatforms,
     ]);
 }
 
@@ -1538,6 +2137,18 @@ function getLatestAppVersion($appId)
  */
 function downloadLatestAppVersion($appId)
 {
+    // Get current auth entity
+    $entity = getCurrentAuthEntity();
+    
+    // Check visibility access
+    if (!canViewApp($appId, $entity)) {
+        sendResponse(403, [
+            "error" => true,
+            "message" => "Accès refusé à cette application",
+        ]);
+        return;
+    }
+    
     // Vérifier que l'application existe
     $appExist = isAppExisting($appId);
     if (!$appExist) {
@@ -1551,21 +2162,26 @@ function downloadLatestAppVersion($appId)
     $appInfo = getAppInfo($appId);
 
     $currentVersion = $appInfo["current_version"];
-    $versionsDir = getAppVersionsDirectory($appId);
+    $requestedPlatform = getRequestedPlatform();
+    $latestVersionFile = resolveVersionFile(
+        $appId,
+        $currentVersion,
+        $requestedPlatform
+    );
 
-    // Chercher le fichier correspondant à la dernière version
-    $latestVersionFiles = glob($versionsDir . "/" . $currentVersion . ".*");
-
-    if (empty($latestVersionFiles)) {
+    if ($latestVersionFile === null) {
         sendResponse(404, [
             "error" => true,
-            "message" => "Aucun fichier trouvé pour la dernière version",
+            "message" =>
+                $requestedPlatform === null
+                    ? "Aucun fichier trouvé pour la dernière version"
+                    : "Aucun fichier trouvé pour la dernière version sur la plateforme demandée",
         ]);
         return;
     }
 
-    $latestVersionFile = $latestVersionFiles[0];
-    $filename = basename($latestVersionFile);
+    $filename = $latestVersionFile["filename"];
+    $filePath = $latestVersionFile["path"];
 
     // Gestion du téléchargement
     $fileExtension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
@@ -1586,16 +2202,14 @@ function downloadLatestAppVersion($appId)
     header("Content-Type: " . $contentType);
     header(
         'Content-Disposition: attachment; filename="' .
-            $appId .
-            "-" .
-            $filename .
+            buildDownloadFilename($appId, $filename) .
             '"'
     );
-    header("Content-Length: " . filesize($latestVersionFile));
+    header("Content-Length: " . filesize($filePath));
     header("Cache-Control: no-cache, must-revalidate");
     header("Pragma: no-cache");
 
-    $handle = fopen($latestVersionFile, 'rb');
+    $handle = fopen($filePath, 'rb');
     if ($handle === false) {
         sendResponse(500, [
             "error" => true,
@@ -1626,6 +2240,18 @@ function downloadLatestAppVersion($appId)
  */
 function downloadSpecificAppVersion($appId, $version)
 {
+    // Get current auth entity
+    $entity = getCurrentAuthEntity();
+    
+    // Check visibility access
+    if (!canViewApp($appId, $entity)) {
+        sendResponse(403, [
+            "error" => true,
+            "message" => "Accès refusé à cette application",
+        ]);
+        return;
+    }
+    
     // Vérifier que l'application existe
     $appExist = isAppExisting($appId);
     if (!$appExist) {
@@ -1636,14 +2262,11 @@ function downloadSpecificAppVersion($appId, $version)
         return;
     }
 
-    $appInfo = getAppInfo($appId);
-
-    $versionsDir = getAppVersionsDirectory($appId);
-
     // Chercher le fichier correspondant à la version spécifiée
-    $versionFiles = glob($versionsDir . "/" . $version . ".*");
+    $requestedPlatform = getRequestedPlatform();
+    $versionFile = resolveVersionFile($appId, $version, $requestedPlatform);
 
-    if (empty($versionFiles)) {
+    if ($versionFile === null) {
         sendResponse(404, [
             "error" => true,
             "message" => "Version spécifiée non trouvée",
@@ -1651,8 +2274,8 @@ function downloadSpecificAppVersion($appId, $version)
         return;
     }
 
-    $versionFile = $versionFiles[0];
-    $filename = basename($versionFile);
+    $filename = $versionFile["filename"];
+    $filePath = $versionFile["path"];
 
     // Gestion du téléchargement
     $fileExtension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
@@ -1664,18 +2287,13 @@ function downloadSpecificAppVersion($appId, $version)
 
     // Envoyer les en-têtes
     header("Content-Type: " . $contentType);
-    header(
-        'Content-Disposition: attachment; filename="' .
-            $appId .
-            "-" .
-            $filename .
-            '"'
-    );
-    header("Content-Length: " . filesize($versionFile));
+    // header('Content-Disposition: attachment; filename="' . $appId . "-" . $filename . '"');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header("Content-Length: " . filesize($filePath));
     header("Cache-Control: no-cache, must-revalidate");
     header("Pragma: no-cache");
 
-    $handle = fopen($versionFile, 'rb');
+    $handle = fopen($filePath, 'rb');
     if ($handle === false) {
         sendResponse(500, [
             "error" => true,
@@ -1689,10 +2307,94 @@ function downloadSpecificAppVersion($appId, $version)
         ob_end_clean();
     }
     
-    // Stream file in 8MB chunks
     while (!feof($handle)) {
         echo fread($handle, 8 * 1024 * 1024); // 8MB chunks
         flush(); // Force send to client
+    }
+    
+    fclose($handle);
+    exit();
+}
+
+function downloadSpecificPlatformVersion($appId, $version, $platform)
+{
+    $entity = getCurrentAuthEntity();
+    if (!canViewApp($appId, $entity)) {
+        sendResponse(403, [
+            "error" => true,
+            "message" => "Accès refusé à cette application",
+        ]);
+        return;
+    }
+
+    $appExist = isAppExisting($appId);
+    if (!$appExist) {
+        sendResponse(404, [
+            "error" => true,
+            "message" => "Application non trouvée",
+        ]);
+        return;
+    }
+
+    $versionsDir = getAppVersionsDirectory($appId);
+    $versionDir = $versionsDir . '/' . $version;
+    
+    if (!is_dir($versionDir)) {
+        sendResponse(404, [
+            "error" => true,
+            "message" => "Version non trouvée ou format legacy (utilisez /download/{version})",
+        ]);
+        return;
+    }
+    
+    $files = getVersionFiles($appId, $version);
+    $targetFile = null;
+    
+    foreach ($files as $file) {
+        if ($file['platform'] === $platform) {
+            $targetFile = $file;
+            break;
+        }
+    }
+    
+    if (!$targetFile) {
+        sendResponse(404, [
+            "error" => true,
+            "message" => "Plateforme non disponible pour cette version",
+        ]);
+        return;
+    }
+    
+    $filePath = $targetFile['path'];
+    $filename = $targetFile['filename'];
+    
+    $fileExtension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    $mimeTypes = getMimeTypes();
+    $contentType = $mimeTypes[$fileExtension] ?? "application/octet-stream";
+    
+    header("Content-Type: " . $contentType);
+    // header('Content-Disposition: attachment; filename="' . $appId . "-" . $filename . '"');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header("Content-Length: " . filesize($filePath));
+    header("Cache-Control: no-cache, must-revalidate");
+    header("Pragma: no-cache");
+    
+    $handle = fopen($filePath, 'rb');
+    if ($handle === false) {
+        sendResponse(500, [
+            "error" => true,
+            "message" => "Impossible d'ouvrir le fichier",
+        ]);
+        return;
+    }
+    
+    if (ob_get_level()) {
+        ob_end_clean();
+    }
+    
+    while (!feof($handle)) {
+        echo fread($handle, 8 * 1024 * 1024);
+        flush();
     }
     
     fclose($handle);
@@ -1705,6 +2407,18 @@ function downloadSpecificAppVersion($appId, $version)
  */
 function getAppChangelog($appId)
 {
+    // Get current auth entity
+    $entity = getCurrentAuthEntity();
+    
+    // Check visibility access
+    if (!canViewApp($appId, $entity)) {
+        sendResponse(403, [
+            "error" => true,
+            "message" => "Accès refusé à cette application",
+        ]);
+        return;
+    }
+    
     $appExist = isAppExisting($appId);
     if (!$appExist) {
         sendResponse(404, [
@@ -1743,6 +2457,18 @@ function getAppChangelog($appId)
  */
 function getAppChangelogRaw($appId)
 {
+    // Get current auth entity
+    $entity = getCurrentAuthEntity();
+    
+    // Check visibility access
+    if (!canViewApp($appId, $entity)) {
+        sendResponse(403, [
+            "error" => true,
+            "message" => "Accès refusé à cette application",
+        ]);
+        return;
+    }
+    
     $appExist = isAppExisting($appId);
     if (!$appExist) {
         sendResponse(404, [
@@ -1778,6 +2504,18 @@ function getAppChangelogRaw($appId)
  */
 function getAppChangelogWeb($appId)
 {
+    // Get current auth entity
+    $entity = getCurrentAuthEntity();
+    
+    // Check visibility access
+    if (!canViewApp($appId, $entity)) {
+        sendResponse(403, [
+            "error" => true,
+            "message" => "Accès refusé à cette application",
+        ]);
+        return;
+    }
+    
     $appExist = isAppExisting($appId);
     if (!$appExist) {
         sendResponse(404, [
@@ -1801,8 +2539,10 @@ function getAppChangelogWeb($appId)
     // $escapedChangelog = htmlspecialchars($changelog, ENT_QUOTES, "UTF-8");
     $escapedChangelog = json_encode($changelog, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 
-    $versions_url = "https://" . config("hostname") . "/api/apps/{$appId}/web";
-
+    
+    $baseVersionsUrl = "https://" . config("hostname") . "/api/apps/{$appId}/web";
+    $versions_url = buildUrlWithPassword($baseVersionsUrl);
+    
     // Générer la page HTML avec le parseur Markdown (marked.js)
     $html = <<<HTML
 <!DOCTYPE html>
@@ -2099,991 +2839,930 @@ function uploadAppChangelog($user, $appId)
  * @param array $user Utilisateur authentifié
  * @param string $appId Identifiant de l'application
  */
-function uploadAppVersion($user, $appId)
+ function uploadAppVersion($user, $appId)
+ {
+     if (!hasAppAccess($user, $appId)) {
+         sendResponse(403, [
+             "error" => true,
+             "message" => "Accès non autorisé à cette application",
+         ]);
+         return;
+     }
+ 
+     $appExist = isAppExisting($appId);
+     if (!$appExist) {
+         sendResponse(404, [
+             "error" => true,
+             "message" => "Application non trouvée",
+         ]);
+         return;
+     }
+ 
+     $appInfo = getAppInfo($appId);
+ 
+     if (!isset($_POST["version"]) || !isset($_FILES["file"])) {
+         sendResponse(400, [
+             "error" => true,
+             "message" => "Données manquantes (version ou fichier)",
+         ]);
+         return;
+     }
+ 
+     $version = $_POST["version"];
+     $platform = $_POST["platform"] ?? null; // Optional platform parameter
+ 
+     if (!preg_match('/^[0-9]+\.[0-9]+\.[0-9]+$/', $version)) {
+         sendResponse(400, [
+             "error" => true,
+             "message" => "Format de version invalide, doit être x.y.z",
+         ]);
+         return;
+     }
+ 
+     if ($_FILES["file"]["error"] === UPLOAD_ERR_OK) {
+         $uploaded_file = $_FILES["file"]["tmp_name"];
+         $original_filename = $_FILES["file"]["name"];
+         
+         $versionsDir = getAppVersionsDirectory($appId);
+         
+         // Determine if we should use multi-platform format
+         if ($platform) {
+             // New multi-platform format
+             $versionDir = $versionsDir . '/' . $version;
+             if (!is_dir($versionDir)) {
+                 mkdir($versionDir, 0755, true);
+             }
+             
+             // Validate platform
+             $platforms = getSupportedPlatforms();
+             if (!isset($platforms[$platform])) {
+                 sendResponse(400, [
+                     "error" => true,
+                     "message" => "Plateforme invalide. Plateformes supportées: " . implode(', ', array_keys($platforms)),
+                 ]);
+                 return;
+             }
+             
+             $destination = $versionDir . '/' . $original_filename;
+             
+             if (move_uploaded_file($uploaded_file, $destination)) {
+                 // Update current version if this is newer
+                 $updateCurrentVersion = true;
+                 
+                 if ($updateCurrentVersion || version_compare($version, $appInfo["current_version"]) > 0) {
+                     $appInfo["current_version"] = $version;
+                     $appInfo["updated_at"] = date("Y-m-d H:i:s");
+                     
+                     $infoFile = getAppDirectory($appId) . "/info.json";
+                     file_put_contents($infoFile, json_encode($appInfo, JSON_PRETTY_PRINT));
+                 }
+                 
+                 sendResponse(200, [
+                     "message" => "Version téléchargée avec succès (multi-platform)",
+                     "app" => array_merge(["id" => $appId], $appInfo),
+                     "version" => $version,
+                     "platform" => $platform,
+                     "filename" => $original_filename,
+                     "download_url" => "https://" . config("hostname") . "/api/apps/" . $appId . "/download/" . $version . "/" . $platform,
+                 ]);
+             } else {
+                 sendResponse(500, [
+                     "error" => true,
+                     "message" => "Échec du déplacement du fichier",
+                 ]);
+             }
+         } else {
+             // Old format (backward compatible)
+             $file_extension = pathinfo($original_filename, PATHINFO_EXTENSION);
+             $version_filename = $version . "." . $file_extension;
+             $destination = $versionsDir . "/" . $version_filename;
+             
+             if (move_uploaded_file($uploaded_file, $destination)) {
+                 $updateCurrentVersion = true;
+                 
+                 if ($updateCurrentVersion || version_compare($version, $appInfo["current_version"]) > 0) {
+                     $appInfo["current_version"] = $version;
+                     $appInfo["updated_at"] = date("Y-m-d H:i:s");
+                     
+                     $infoFile = getAppDirectory($appId) . "/info.json";
+                     file_put_contents($infoFile, json_encode($appInfo, JSON_PRETTY_PRINT));
+                 }
+                 
+                 sendResponse(200, [
+                     "message" => "Version téléchargée avec succès (legacy format)",
+                     "app" => array_merge(["id" => $appId], $appInfo),
+                     "version" => $version,
+                     "filename" => $version_filename,
+                     "download_url" => "https://" . config("hostname") . "/api/apps/" . $appId . "/download/" . $version,
+                 ]);
+             } else {
+                 sendResponse(500, [
+                     "error" => true,
+                     "message" => "Échec du déplacement du fichier",
+                 ]);
+             }
+         }
+     } else {
+         sendResponse(400, [
+             "error" => true,
+             "message" => "Erreur lors du téléchargement du fichier",
+             "upload_error_code" => $_FILES["file"]["error"],
+         ]);
+     }
+ }
+
+ function getApiDocumentation()
+ {
+     $swagger = [
+         "openapi" => "3.0.0",
+         "info" => [
+             "title" => config("app_name") . " API",
+             "version" => config("version"),
+             "description" =>
+                 "API pour gérer les audits et fichiers par région, ainsi que les endpoints de mise à jour (changelog, version...) pour les apps gérant les audits",
+         ],
+         "servers" => [
+             [
+                 "url" => "https://" . config("hostname") . "/api",
+                 "description" => "Serveur principal",
+             ],
+         ],
+         "paths" => [
+             "/regions" => [
+                 "get" => [
+                     "tags" => ["audits"],
+                     "summary" => "Liste toutes les régions",
+                     "responses" => [
+                         "200" => [
+                             "description" => "Liste des régions",
+                             "content" => [
+                                 "application/json" => [
+                                     "schema" => [
+                                         "type" => "object",
+                                         "properties" => [
+                                             "regions" => [
+                                                 "type" => "object",
+                                                 "additionalProperties" => [
+                                                     "type" => "string",
+                                                 ],
+                                             ],
+                                         ],
+                                     ],
+                                 ],
+                             ],
+                         ],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/regions/{regionCode}" => [
+                 "get" => [
+                     "tags" => ["audits"],
+                     "summary" => "Liste tous les audits d'une région",
+                     "parameters" => [
+                         [
+                             "name" => "regionCode",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Code de la région (2 caractères)",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => [
+                             "description" => "Liste des audits de la région",
+                             "content" => [
+                                 "application/json" => [
+                                     "schema" => [
+                                         "type" => "object",
+                                         "properties" => [
+                                             "region" => [
+                                                 "type" => "object",
+                                                 "properties" => [
+                                                     "code" => ["type" => "string"],
+                                                     "name" => ["type" => "string"],
+                                                 ],
+                                             ],
+                                             "audits_count" => ["type" => "integer"],
+                                             "audits" => [
+                                                 "type" => "array",
+                                                 "items" => [
+                                                     "type" => "object",
+                                                     "properties" => [
+                                                         "ecid" => ["type" => "string"],
+                                                         "modified_date" => [
+                                                             "type" => "string",
+                                                             "format" => "date-time",
+                                                         ],
+                                                         "files" => [
+                                                             "type" => "array",
+                                                             "items" => [
+                                                                 "type" => "object",
+                                                                 "properties" => [
+                                                                     "name" => ["type" => "string"],
+                                                                     "type" => [
+                                                                         "type" => "string",
+                                                                         "enum" => ["file", "directory"],
+                                                                     ],
+                                                                     "modified_date" => [
+                                                                         "type" => "string",
+                                                                         "format" => "date-time",
+                                                                     ],
+                                                                 ],
+                                                             ],
+                                                         ],
+                                                     ],
+                                                 ],
+                                             ],
+                                         ],
+                                     ],
+                                 ],
+                             ],
+                         ],
+                         "403" => ["description" => "Accès non autorisé à cette région"],
+                         "404" => ["description" => "Région non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/upload/zip" => [
+                 "post" => [
+                     "tags" => ["audits"],
+                     "summary" => "Envoyer un audit au format ZIP",
+                     "requestBody" => [
+                         "content" => [
+                             "multipart/form-data" => [
+                                 "schema" => [
+                                     "type" => "object",
+                                     "properties" => [
+                                         "ecid" => [
+                                             "type" => "string",
+                                             "description" => "Nom du fichier / dossier de destination (ex: STPC29-0000)",
+                                         ],
+                                         "region" => [
+                                             "type" => "string",
+                                             "description" => "Code région 2 lettres (ex: ST) ou nom complet (ex: STRASBOURG). Si absent, déduit des 2 premiers caractères de ecid.",
+                                         ],
+                                         "actual_file" => [
+                                             "type" => "string",
+                                             "format" => "binary",
+                                             "description" => "Fichier ZIP à envoyer",
+                                         ],
+                                     ],
+                                     "required" => ["ecid", "actual_file"],
+                                 ],
+                             ],
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Fichier envoyé et extrait avec succès"],
+                         "400" => ["description" => "Requête invalide"],
+                         "403" => ["description" => "Accès non autorisé"],
+                         "500" => ["description" => "Erreur serveur"],
+                     ],
+                     "security" => [["ApiKeyAuth" => []]],
+                 ],
+             ],
+             "/upload/audit" => [
+                 "post" => [
+                     "tags" => ["audits"],
+                     "summary" => "Envoyer un audit au format HTML",
+                     "requestBody" => [
+                         "content" => [
+                             "multipart/form-data" => [
+                                 "schema" => [
+                                     "type" => "object",
+                                     "properties" => [
+                                         "region" => [
+                                             "type" => "string",
+                                             "description" => "Code région 2 lettres (ex: ST) ou nom complet (ex: STRASBOURG)",
+                                         ],
+                                         "actual_file" => [
+                                             "type" => "string",
+                                             "format" => "binary",
+                                             "description" => "Fichier audit HTML à envoyer",
+                                         ],
+                                     ],
+                                     "required" => ["region", "actual_file"],
+                                 ],
+                             ],
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => [
+                             "description" => "Fichier envoyé avec succès",
+                             "content" => [
+                                 "application/json" => [
+                                     "schema" => [
+                                         "type" => "object",
+                                         "properties" => [
+                                             "message" => ["type" => "string"],
+                                             "url" => ["type" => "string"],
+                                             "region" => ["type" => "string"],
+                                             "file" => ["type" => "string"],
+                                         ],
+                                     ],
+                                 ],
+                             ],
+                         ],
+                         "400" => ["description" => "Requête invalide ou aucun fichier envoyé"],
+                         "403" => ["description" => "Accès non autorisé à cette région"],
+                         "500" => ["description" => "Erreur lors du traitement du fichier"],
+                     ],
+                     "security" => [["ApiKeyAuth" => []]],
+                 ],
+             ],
+             "/apps" => [
+                 "get" => [
+                     "tags" => ["apps"],
+                     "summary" => "Liste toutes les applications",
+                     "responses" => [
+                         "200" => [
+                             "description" => "Liste des applications",
+                             "content" => [
+                                 "application/json" => [
+                                     "schema" => [
+                                         "type" => "object",
+                                         "properties" => [
+                                             "apps" => [
+                                                 "type" => "array",
+                                                 "items" => [
+                                                     "type" => "object",
+                                                     "properties" => [
+                                                         "id" => ["type" => "string"],
+                                                         "name" => ["type" => "string"],
+                                                         "description" => ["type" => "string"],
+                                                         "current_version" => ["type" => "string"],
+                                                         "created_at" => ["type" => "string", "format" => "date-time"],
+                                                         "updated_at" => ["type" => "string", "format" => "date-time"],
+                                                     ],
+                                                 ],
+                                             ],
+                                         ],
+                                     ],
+                                 ],
+                             ],
+                         ],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/apps/web" => [
+                 "get" => [
+                     "tags" => ["apps"],
+                     "summary" => "Lister toutes les applications dans une page web",
+                     "parameters" => [],
+                     "responses" => [
+                         "200" => [
+                             "description" => "Page HTML de toutes les applications, avec bouton de téléchargement et changelog",
+                         ],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/apps/{appId}" => [
+                 "get" => [
+                     "tags" => ["apps"],
+                     "summary" => "Lister toutes les versions d'une application",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Liste des versions de l'application"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/apps/{appId}/web" => [
+                 "get" => [
+                     "tags" => ["apps"],
+                     "summary" => "Lister toutes les versions d'une application dans une page web",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Page HTML de liste des versions pour l'utilisateur final"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/apps/{appId}/upload" => [
+                 "post" => [
+                     "tags" => ["apps"],
+                     "summary" => "Envoyer une nouvelle version d'application",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                     ],
+                     "requestBody" => [
+                         "content" => [
+                             "multipart/form-data" => [
+                                 "schema" => [
+                                     "type" => "object",
+                                     "properties" => [
+                                         "version" => [
+                                             "type" => "string",
+                                             "description" => "Numéro de version (format x.y.z)",
+                                         ],
+                                         "platform" => [
+                                             "type" => "string",
+                                             "description" => "Plateforme cible (windows, macos, macos-x64, linux). Si absent, format legacy.",
+                                             "enum" => ["windows", "macos", "macos-x64", "linux"],
+                                         ],
+                                         "file" => [
+                                             "type" => "string",
+                                             "format" => "binary",
+                                             "description" => "Fichier de l'application",
+                                         ],
+                                     ],
+                                     "required" => ["version", "file"],
+                                 ],
+                             ],
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Version téléchargée avec succès"],
+                         "400" => ["description" => "Requête invalide"],
+                         "403" => ["description" => "Accès non autorisé"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [["ApiKeyAuth" => []]],
+                 ],
+             ],
+             "/apps/{appId}/latest" => [
+                 "get" => [
+                     "tags" => ["apps"],
+                     "summary" => "Obtenir les informations sur la dernière version d'une application",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                         [
+                             "name" => "platform",
+                             "in" => "query",
+                             "required" => false,
+                             "schema" => [
+                                 "type" => "string",
+                                 "enum" => ["windows", "macos", "macos-x64", "linux"],
+                             ],
+                             "description" => "Plateforme souhaitée (si la version contient plusieurs fichiers)",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Détails de la dernière version de l'application"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/apps/{appId}/download/latest" => [
+                 "get" => [
+                     "tags" => ["apps"],
+                     "summary" => "Télécharger la dernière version d'une application",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                         [
+                             "name" => "platform",
+                             "in" => "query",
+                             "required" => false,
+                             "schema" => [
+                                 "type" => "string",
+                                 "enum" => ["windows", "macos", "macos-x64", "linux"],
+                             ],
+                             "description" => "Plateforme souhaitée (si la version contient plusieurs fichiers)",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Fichier téléchargé avec succès"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/apps/{appId}/download/{version}" => [
+                 "get" => [
+                     "tags" => ["apps"],
+                     "summary" => "Télécharger une version spécifique d'une application",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                         [
+                             "name" => "version",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Numéro de version (format x.y.z)",
+                         ],
+                         [
+                             "name" => "platform",
+                             "in" => "query",
+                             "required" => false,
+                             "schema" => [
+                                 "type" => "string",
+                                 "enum" => ["windows", "macos", "macos-x64", "linux"],
+                             ],
+                             "description" => "Plateforme souhaitée (si la version contient plusieurs fichiers)",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Fichier téléchargé avec succès"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/apps/{appId}/download/{version}/{platform}" => [
+                 "get" => [
+                     "tags" => ["apps"],
+                     "summary" => "Télécharger une version spécifique pour une plateforme donnée",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                         [
+                             "name" => "version",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Numéro de version (format x.y.z)",
+                         ],
+                         [
+                             "name" => "platform",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string", "enum" => ["windows", "macos", "macos-x64", "linux"]],
+                             "description" => "Plateforme cible",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Fichier téléchargé avec succès"],
+                         "404" => ["description" => "Application ou plateforme non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/apps/{appId}/changelog" => [
+                 "post" => [
+                     "tags" => ["apps • changelog"],
+                     "summary" => "Envoyer et mettre à jour le changelog via un fichier",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                     ],
+                     "requestBody" => [
+                         "content" => [
+                             "multipart/form-data" => [
+                                 "schema" => [
+                                     "type" => "object",
+                                     "properties" => [
+                                         "changelog_file" => [
+                                             "type" => "string",
+                                             "format" => "binary",
+                                             "description" => "Fichier changelog au format texte ou markdown (.md)",
+                                         ],
+                                     ],
+                                     "required" => ["changelog_file"],
+                                 ],
+                             ],
+                         ],
+                         "description" => "Le fichier changelog à envoyer (format texte ou markdown recommandé)",
+                     ],
+                     "responses" => [
+                         "200" => [
+                             "description" => "Fichier changelog uploadé avec succès",
+                             "content" => [
+                                 "application/json" => [
+                                     "schema" => [
+                                         "type" => "object",
+                                         "properties" => [
+                                             "message" => ["type" => "string"],
+                                             "app" => [
+                                                 "type" => "object",
+                                                 "properties" => [
+                                                     "id" => ["type" => "string"],
+                                                     "name" => ["type" => "string"],
+                                                     "description" => ["type" => "string"],
+                                                     "current_version" => ["type" => "string"],
+                                                     "created_at" => ["type" => "string", "format" => "date-time"],
+                                                     "updated_at" => ["type" => "string", "format" => "date-time"],
+                                                 ],
+                                             ],
+                                             "changelog_size" => ["type" => "integer"],
+                                             "filename" => ["type" => "string"],
+                                         ],
+                                     ],
+                                 ],
+                             ],
+                         ],
+                         "400" => ["description" => "Aucun fichier changelog valide n'a été envoyé"],
+                         "403" => ["description" => "Accès non autorisé à cette application"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [["ApiKeyAuth" => []]],
+                 ],
+                 "put" => [
+                     "tags" => ["apps • changelog"],
+                     "summary" => "Envoyer et mettre à jour le changelog via un objet JSON",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                     ],
+                     "requestBody" => [
+                         "content" => [
+                             "application/json" => [
+                                 "schema" => [
+                                     "type" => "object",
+                                     "properties" => [
+                                         "changelog" => [
+                                             "type" => "string",
+                                             "description" => "Nouveau changelog entier (supporte Markdown multiligne)",
+                                             "example" => "# Version 2.0.0\n\n## Nouvelles fonctionnalités\n- Ajout de l'authentification OAuth\n\n## Corrections de bugs\n- Correction du problème de chargement sur iOS",
+                                         ],
+                                     ],
+                                     "required" => ["changelog"],
+                                 ],
+                                 "examples" => [
+                                     "markdown_changelog" => [
+                                         "summary" => "Exemple de changelog au format Markdown",
+                                         "value" => [
+                                             "changelog" => "# Version 2.0.0\n\n## Nouvelles fonctionnalités\n- Ajout de l'authentification OAuth\n\n## Corrections de bugs\n- Correction du problème de chargement sur iOS",
+                                         ],
+                                     ],
+                                 ],
+                             ],
+                         ],
+                         "description" => "Le changelog doit être fourni au format texte, peut inclure du Markdown",
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Changelog mis à jour"],
+                         "400" => ["description" => "Contenu du changelog non spécifié"],
+                         "403" => ["description" => "Accès non autorisé à cette application"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [["ApiKeyAuth" => []]],
+                 ],
+                 "get" => [
+                     "tags" => ["apps • changelog"],
+                     "summary" => "Obtenir le changelog d'une application en JSON",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Changelog de l'application"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/apps/{appId}/changelog/web" => [
+                 "get" => [
+                     "tags" => ["apps • changelog"],
+                     "summary" => "Afficher le changelog en HTML pour le web",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Page HTML"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/apps/{appId}/changelog/raw" => [
+                 "get" => [
+                     "tags" => ["apps • changelog"],
+                     "summary" => "Obtenir le changelog d'une application en texte brut",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Contenu du fichier changelog brut (txt ou md)"],
+                         "404" => ["description" => "Application non trouvée"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/cpu" => [
+                 "get" => [
+                     "tags" => ["benchmark"],
+                     "summary" => "Récupère les données CPU en JSON",
+                     "description" =>
+                         "Ne pas utiliser la fonction Try It Out (crash de la page), appeler la page depuis votre navigateur directement pour tester. (eg: https://" .
+                         config("hostname") . "/api/cpu )",
+                     "responses" => [
+                         "200" => [
+                             "description" => "Liste des benchmarks CPU",
+                             "content" => [
+                                 "application/json" => [
+                                     "schema" => ["type" => "array", "items" => ["type" => "object"]],
+                                 ],
+                             ],
+                         ],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/cpu/csv" => [
+                 "get" => [
+                     "tags" => ["benchmark"],
+                     "summary" => "Récupère les données CPU en CSV",
+                     "description" =>
+                         "Ne pas utiliser la fonction Try It Out (crash de la page), appeler la page depuis votre navigateur directement pour tester. (eg: https://" .
+                         config("hostname") . "/api/cpu/csv )",
+                     "responses" => [
+                         "200" => [
+                             "description" => "Fichier CSV des benchmarks CPU",
+                             "content" => [
+                                 "text/csv" => [
+                                     "schema" => ["type" => "string", "format" => "binary"],
+                                 ],
+                             ],
+                         ],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/version" => [
+                 "get" => [
+                     "tags" => ["api"],
+                     "summary" => "Retourne la version actuelle de l'API",
+                     "responses" => [
+                         "200" => ["description" => "Numéro de version actuelle de l'API"],
+                     ],
+                 ],
+             ],
+             "/logs" => [
+                 "get" => [
+                     "tags" => ["api"],
+                     "summary" => "Consulter les logs d'utilisation de l'API",
+                     "description" => "Accès réservé aux administrateurs (ACL 10+)",
+                     "parameters" => [
+                         [
+                             "name" => "limit",
+                             "in" => "query",
+                             "required" => false,
+                             "schema" => ["type" => "integer", "default" => 100],
+                             "description" => "Nombre maximum d'entrées à retourner",
+                         ],
+                         [
+                             "name" => "filter",
+                             "in" => "query",
+                             "required" => false,
+                             "schema" => ["type" => "string"],
+                             "description" => "Filtre textuel sur les entrées de log",
+                         ],
+                         [
+                             "name" => "date",
+                             "in" => "query",
+                             "required" => false,
+                             "schema" => ["type" => "string", "format" => "date"],
+                             "description" => "Filtre par date (format YYYY-MM-DD)",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => [
+                             "description" => "Liste des logs d'utilisation",
+                             "content" => [
+                                 "application/json" => [
+                                     "schema" => [
+                                         "type" => "object",
+                                         "properties" => [
+                                             "count" => ["type" => "integer"],
+                                             "logs" => [
+                                                 "type" => "array",
+                                                 "items" => [
+                                                     "type" => "object",
+                                                     "properties" => [
+                                                         "timestamp" => ["type" => "string"],
+                                                         "identifier" => ["type" => "string"],
+                                                         "endpoint" => ["type" => "string"],
+                                                         "ip" => ["type" => "string"],
+                                                         "user_agent" => ["type" => "string"],
+                                                     ],
+                                                 ],
+                                             ],
+                                             "filters" => [
+                                                 "type" => "object",
+                                                 "properties" => [
+                                                     "limit" => ["type" => "integer"],
+                                                     "filter" => ["type" => "string"],
+                                                     "date" => ["type" => "string"],
+                                                 ],
+                                             ],
+                                         ],
+                                     ],
+                                 ],
+                             ],
+                         ],
+                         "401" => ["description" => "Non authentifié"],
+                         "403" => ["description" => "Niveau d'accès insuffisant"],
+                         "404" => ["description" => "Fichier de log non trouvé"],
+                     ],
+                     "security" => [["ApiKeyAuth" => []]],
+                 ],
+             ],
+         ],
+         "components" => [
+             "securitySchemes" => [
+                 "ApiKeyAuth" => [
+                     "type" => "apiKey",
+                     "in" => "header",
+                     "name" => "X-API-Key",
+                 ],
+             ],
+         ],
+     ];
+
+     sendResponse(200, $swagger);
+ }
+
+/*
+* Proxy required as cpubenchmark isn't available anymore
+* They seems to block OVH servers
+*/
+function fetchCpuBenchmarkDataProxied(): ?array
 {
-    // Vérifier l'accès à l'application
-    if (!hasAppAccess($user, $appId)) {
-        sendResponse(403, [
-            "error" => true,
-            "message" => "Accès non autorisé à cette application",
-        ]);
-        return;
+    $ch = curl_init("https://cpubenchmark.drop.tf");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 10,
+    ]);
+    $data = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    // curl_close($ch);
+    
+    if (!$data || $httpCode !== 200) {
+        return null;
     }
-
-    // Vérifier que l'application existe
-    $appExist = isAppExisting($appId);
-    if (!$appExist) {
-        sendResponse(404, [
-            "error" => true,
-            "message" => "Application non trouvée",
-        ]);
-        return;
-    }
-
-    $appInfo = getAppInfo($appId);
-
-    // Vérifier que les données nécessaires sont présentes
-    if (!isset($_POST["version"]) || !isset($_FILES["file"])) {
-        sendResponse(400, [
-            "error" => true,
-            "message" => "Données manquantes (version ou fichier)",
-        ]);
-        return;
-    }
-
-    $version = $_POST["version"];
-
-    // Vérifier que la version est au format valide (x.y.z)
-    if (!preg_match('/^[0-9]+\.[0-9]+\.[0-9]+$/', $version)) {
-        sendResponse(400, [
-            "error" => true,
-            "message" => "Format de version invalide, doit être x.y.z",
-        ]);
-        return;
-    }
-
-    // Vérifier que le fichier est bien téléchargé
-    if ($_FILES["file"]["error"] === UPLOAD_ERR_OK) {
-        $uploaded_file = $_FILES["file"]["tmp_name"];
-        $original_filename = $_FILES["file"]["name"];
-        $file_extension = pathinfo($original_filename, PATHINFO_EXTENSION);
-
-        // Créer le nom du fichier de version
-        $version_filename = $version . "." . $file_extension;
-        $versionsDir = getAppVersionsDirectory($appId);
-        $destination = $versionsDir . "/" . $version_filename;
-
-        // Déplacer le fichier téléchargé
-        if (move_uploaded_file($uploaded_file, $destination)) {
-            // Mettre à jour la version courante si spécifié
-            // $updateCurrentVersion =
-            //     isset($_POST["set_as_current"]) &&
-            //     $_POST["set_as_current"] === "true";
-            $updateCurrentVersion = true;
-
-            if (
-                $updateCurrentVersion ||
-                version_compare($version, $appInfo["current_version"]) > 0
-            ) {
-                $appInfo["current_version"] = $version;
-                $appInfo["updated_at"] = date("Y-m-d H:i:s");
-
-                // Sauvegarder les modifications
-                $infoFile = getAppDirectory($appId) . "/info.json";
-                file_put_contents(
-                    $infoFile,
-                    json_encode($appInfo, JSON_PRETTY_PRINT)
-                );
-            }
-
-            sendResponse(200, [
-                "message" => "Version téléchargée avec succès",
-                "app" => array_merge(["id" => $appId], $appInfo),
-                "version" => $version,
-                "filename" => $version_filename,
-                "download_url" =>
-                    "https://" .
-                    config("hostname") .
-                    "/api/apps/" .
-                    $appId .
-                    "/download/" .
-                    $version,
-            ]);
-        } else {
-            sendResponse(500, [
-                "error" => true,
-                "message" => "Échec du déplacement du fichier",
-            ]);
-        }
-    } else {
-        sendResponse(400, [
-            "error" => true,
-            "message" => "Erreur lors du téléchargement du fichier",
-            "upload_error_code" => $_FILES["file"]["error"],
-        ]);
-    }
-}
-
-function getApiDocumentation()
-{
-    // Générer une documentation au format OpenAPI
-    $swagger = [
-        "openapi" => "3.0.0",
-        "info" => [
-            "title" => config("app_name") . " API",
-            "version" => config("version"),
-            "description" =>
-                "API pour gérer les audits et fichiers par région, ainsi que les endpoints de mise à jour (changelog, version...) pour les apps gérant les audits",
-        ],
-        "servers" => [
-            [
-                "url" => "https://" . config("hostname") . "/api",
-                "description" => "Serveur principal",
-            ],
-        ],
-        "paths" => [
-            "/regions" => [
-                "get" => [
-                    "tags" => ["audits"],
-                    "summary" => "Liste toutes les régions",
-                    "responses" => [
-                        "200" => [
-                            "description" => "Liste des régions",
-                            "content" => [
-                                "application/json" => [
-                                    "schema" => [
-                                        "type" => "object",
-                                        "properties" => [
-                                            "regions" => [
-                                                "type" => "object",
-                                                "additionalProperties" => [
-                                                    "type" => "string",
-                                                ],
-                                            ],
-                                        ],
-                                    ],
-                                ],
-                            ],
-                        ],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/regions/{regionCode}" => [
-                "get" => [
-                    "tags" => ["audits"],
-                    "summary" => 'Liste tous les audits d\'une région',
-                    "parameters" => [
-                        [
-                            "name" => "regionCode",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => "Code de la région (2 caractères)",
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" => "Liste des audits de la région",
-                            "content" => [
-                                "application/json" => [
-                                    "schema" => [
-                                        "type" => "object",
-                                        "properties" => [
-                                            "region" => [
-                                                "type" => "object",
-                                                "properties" => [
-                                                    "code" => [
-                                                        "type" => "string",
-                                                    ],
-                                                    "name" => [
-                                                        "type" => "string",
-                                                    ],
-                                                ],
-                                            ],
-                                            "audits_count" => [
-                                                "type" => "integer",
-                                            ],
-                                            "audits" => [
-                                                "type" => "array",
-                                                "items" => [
-                                                    "type" => "object",
-                                                    "properties" => [
-                                                        "ecid" => [
-                                                            "type" => "string",
-                                                        ],
-                                                        "modified_date" => [
-                                                            "type" => "string",
-                                                            "format" =>
-                                                                "date-time",
-                                                        ],
-                                                        "files" => [
-                                                            "type" => "array",
-                                                            "items" => [
-                                                                "type" =>
-                                                                    "object",
-                                                                "properties" => [
-                                                                    "name" => [
-                                                                        "type" =>
-                                                                            "string",
-                                                                    ],
-                                                                    // 'size' => ['type' => 'integer'],
-                                                                    // 'size_formatted' => ['type' => 'string'],
-                                                                    "type" => [
-                                                                        "type" =>
-                                                                            "string",
-                                                                        "enum" => [
-                                                                            "file",
-                                                                            "directory",
-                                                                        ],
-                                                                    ],
-                                                                    "modified_date" => [
-                                                                        "type" =>
-                                                                            "string",
-                                                                        "format" =>
-                                                                            "date-time",
-                                                                    ],
-                                                                ],
-                                                            ],
-                                                        ],
-                                                    ],
-                                                ],
-                                            ],
-                                        ],
-                                    ],
-                                ],
-                            ],
-                        ],
-                        "403" => [
-                            "description" =>
-                                "Accès non autorisé à cette région",
-                        ],
-                        "404" => ["description" => "Région non trouvée"],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/upload/zip" => [
-                "post" => [
-                    "tags" => ["audits"],
-                    "summary" => "Envoyer un audit au format ZIP",
-                    "requestBody" => [
-                        "content" => [
-                            "multipart/form-data" => [
-                                "schema" => [
-                                    "type" => "object",
-                                    "properties" => [
-                                        "ecid" => [
-                                            "type" => "string",
-                                            "description" =>
-                                                "ID EC avec préfixe de région (ex: STPC29-0000)",
-                                        ],
-                                        "actual_file" => [
-                                            "type" => "string",
-                                            "format" => "binary",
-                                            "description" =>
-                                                "Fichier ZIP à envoyer",
-                                        ],
-                                    ],
-                                    "required" => ["ecid", "actual_file"],
-                                ],
-                            ],
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" =>
-                                "Fichier envoyé et extrait avec succès",
-                        ],
-                        "400" => ["description" => "Requête invalide"],
-                        "403" => ["description" => "Accès non autorisé"],
-                        "500" => ["description" => "Erreur serveur"],
-                    ],
-                    "security" => [["ApiKeyAuth" => []]],
-                ],
-            ],
-            "/upload/audit" => [
-                "post" => [
-                    "tags" => ["audits"],
-                    "summary" => "Envoyer un audit au format HTML",
-                    "requestBody" => [
-                        "content" => [
-                            "multipart/form-data" => [
-                                "schema" => [
-                                    "type" => "object",
-                                    "properties" => [
-                                        "region" => [
-                                            "type" => "string",
-                                            "description" =>
-                                                "Nom de la région (ex: STRASBOURG)",
-                                        ],
-                                        "actual_file" => [
-                                            "type" => "string",
-                                            "format" => "binary",
-                                            "description" =>
-                                                "Fichier audit HTML à envoyer",
-                                        ],
-                                    ],
-                                    "required" => ["region", "actual_file"],
-                                ],
-                            ],
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" => "Fichier envoyé avec succès",
-                            "content" => [
-                                "application/json" => [
-                                    "schema" => [
-                                        "type" => "object",
-                                        "properties" => [
-                                            "message" => ["type" => "string"],
-                                            "url" => ["type" => "string"],
-                                            "region" => ["type" => "string"],
-                                            "file" => ["type" => "string"],
-                                        ],
-                                    ],
-                                ],
-                            ],
-                        ],
-                        "400" => [
-                            "description" =>
-                                "Requête invalide ou aucun fichier envoyé",
-                        ],
-                        "403" => [
-                            "description" =>
-                                "Accès non autorisé à cette région",
-                        ],
-                        "500" => [
-                            "description" =>
-                                "Erreur lors du traitement du fichier",
-                        ],
-                    ],
-                    "security" => [["ApiKeyAuth" => []]],
-                ],
-            ],
-            "/apps" => [
-                "get" => [
-                    "tags" => ["apps"],
-                    "summary" => "Liste toutes les applications",
-                    "responses" => [
-                        "200" => [
-                            "description" => "Liste des applications",
-                            "content" => [
-                                "application/json" => [
-                                    "schema" => [
-                                        "type" => "object",
-                                        "properties" => [
-                                            "apps" => [
-                                                "type" => "array",
-                                                "items" => [
-                                                    "type" => "object",
-                                                    "properties" => [
-                                                        "id" => [
-                                                            "type" => "string",
-                                                        ],
-                                                        "name" => [
-                                                            "type" => "string",
-                                                        ],
-                                                        "description" => [
-                                                            "type" => "string",
-                                                        ],
-                                                        "current_version" => [
-                                                            "type" => "string",
-                                                        ],
-                                                        "created_at" => [
-                                                            "type" => "string",
-                                                            "format" =>
-                                                                "date-time",
-                                                        ],
-                                                        "updated_at" => [
-                                                            "type" => "string",
-                                                            "format" =>
-                                                                "date-time",
-                                                        ],
-                                                    ],
-                                                ],
-                                            ],
-                                        ],
-                                    ],
-                                ],
-                            ],
-                        ],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/apps/web" => [
-                "get" => [
-                    "tags" => ["apps"],
-                    "summary" =>
-                        "Lister toutes les application dans une page web",
-                    "parameters" => [],
-                    "responses" => [
-                        "200" => [
-                            "description" =>
-                                'Page HTML de toutes les applications, avec un bouton de téléchargement et de changelog, pour l\'utilisateur final',
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/apps/{appId}" => [
-                "get" => [
-                    "tags" => ["apps"],
-                    "summary" =>
-                        'Lister toutes les versions d\'une application',
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => 'Identifiant de l\'application',
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" =>
-                                'Liste des versions de l\'application',
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/apps/{appId}/web" => [
-                "get" => [
-                    "tags" => ["apps"],
-                    "summary" =>
-                        'Lister toutes les versions d\'une application dans une page web',
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => 'Identifiant de l\'application',
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" =>
-                                'Page HTML de liste des versions pour l\'utilisateur final',
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/apps/{appId}/upload" => [
-                "post" => [
-                    "tags" => ["apps"],
-                    "summary" => 'Envoyer une nouvelle version d\'application',
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => 'Identifiant de l\'application',
-                        ],
-                    ],
-                    "requestBody" => [
-                        "content" => [
-                            "multipart/form-data" => [
-                                "schema" => [
-                                    "type" => "object",
-                                    "properties" => [
-                                        "version" => [
-                                            "type" => "string",
-                                            "description" =>
-                                                "Numéro de version (format x.y.z)",
-                                        ],
-                                        "file" => [
-                                            "type" => "string",
-                                            "format" => "binary",
-                                            "description" =>
-                                                'Fichier de l\'application',
-                                        ],
-                                        // "set_as_current" => [
-                                        //     "type" => "boolean",
-                                        //     "description" =>
-                                        //         "Définir comme version courante",
-                                        // ],
-                                    ],
-                                    "required" => ["version", "file"],
-                                ],
-                            ],
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" => "Version téléchargée avec succès",
-                        ],
-                        "400" => ["description" => "Requête invalide"],
-                        "403" => ["description" => "Accès non autorisé"],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [["ApiKeyAuth" => []]],
-                ],
-            ],
-            "/apps/{appId}/latest" => [
-                "get" => [
-                    "tags" => ["apps"],
-                    "summary" =>
-                        'Obtenir les informations à propos de la dernière version d\'une application',
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => 'Identifiant de l\'application',
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" =>
-                                'Détails de la dernière version de l\'application',
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/apps/{appId}/download/latest" => [
-                "get" => [
-                    "tags" => ["apps"],
-                    "summary" =>
-                        'Télécharger la dernière version d\'une application',
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => 'Identifiant de l\'application',
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" => "Fichier téléchargé avec succès",
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/apps/{appId}/download/{version}" => [
-                "get" => [
-                    "tags" => ["apps"],
-                    "summary" =>
-                        'Télécharger une version spécifique d\'une application',
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => 'Identifiant de l\'application',
-                        ],
-                        [
-                            "name" => "version",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => "Numéro de version (format x.y.z)",
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" => "Fichier téléchargé avec succès",
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/apps/{appId}/changelog" => [
-                "post" => [
-                    "tags" => ["apps • changelog"],
-                    "summary" =>
-                        "Envoyer et mettre à jour le changelog via un fichier",
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => "Identifiant de l'application",
-                        ],
-                    ],
-                    "requestBody" => [
-                        "content" => [
-                            "multipart/form-data" => [
-                                "schema" => [
-                                    "type" => "object",
-                                    "properties" => [
-                                        "changelog_file" => [
-                                            "type" => "string",
-                                            "format" => "binary",
-                                            "description" =>
-                                                "Fichier changelog au format texte ou markdown (.md)",
-                                        ],
-                                    ],
-                                    "required" => ["changelog_file"],
-                                ],
-                            ],
-                        ],
-                        "description" =>
-                            "Le fichier changelog à envoyer (format texte ou markdown recommandé)",
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" =>
-                                "Fichier changelog uploadé avec succès",
-                            "content" => [
-                                "application/json" => [
-                                    "schema" => [
-                                        "type" => "object",
-                                        "properties" => [
-                                            "message" => ["type" => "string"],
-                                            "app" => [
-                                                "type" => "object",
-                                                "properties" => [
-                                                    "id" => [
-                                                        "type" => "string",
-                                                    ],
-                                                    "name" => [
-                                                        "type" => "string",
-                                                    ],
-                                                    "description" => [
-                                                        "type" => "string",
-                                                    ],
-                                                    "current_version" => [
-                                                        "type" => "string",
-                                                    ],
-                                                    "created_at" => [
-                                                        "type" => "string",
-                                                        "format" => "date-time",
-                                                    ],
-                                                    "updated_at" => [
-                                                        "type" => "string",
-                                                        "format" => "date-time",
-                                                    ],
-                                                ],
-                                            ],
-                                            "changelog_size" => [
-                                                "type" => "integer",
-                                            ],
-                                            "filename" => ["type" => "string"],
-                                        ],
-                                    ],
-                                ],
-                            ],
-                        ],
-                        "400" => [
-                            "description" =>
-                                "Aucun fichier changelog valide n'a été envoyé",
-                        ],
-                        "403" => [
-                            "description" =>
-                                "Accès non autorisé à cette application",
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [["ApiKeyAuth" => []]],
-                ],
-                "put" => [
-                    "tags" => ["apps • changelog"],
-                    "summary" =>
-                        "Envoyer et mettre à jour le changelog via un objet JSON",
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => 'Identifiant de l\'application',
-                        ],
-                    ],
-                    "requestBody" => [
-                        "content" => [
-                            "application/json" => [
-                                "schema" => [
-                                    "type" => "object",
-                                    "properties" => [
-                                        "changelog" => [
-                                            "type" => "string",
-                                            "description" =>
-                                                "Nouveau changelog entier (prend en charge du texte multiligne avec Markdown)",
-                                            "example" =>
-                                                "# Version 2.0.0\n\n## Nouvelles fonctionnalités\n- Ajout de l'authentification OAuth\n- Interface utilisateur redessinée\n\n## Corrections de bugs\n- Correction du problème de chargement sur iOS",
-                                        ],
-                                    ],
-                                    "required" => ["changelog"],
-                                ],
-                                "examples" => [
-                                    "markdown_changelog" => [
-                                        "summary" =>
-                                            "Exemple de changelog au format Markdown",
-                                        "value" => [
-                                            "changelog" =>
-                                                "# Version 2.0.0\n\n## Nouvelles fonctionnalités\n- Ajout de l'authentification OAuth\n- Interface utilisateur redessinée\n\n## Corrections de bugs\n- Correction du problème de chargement sur iOS",
-                                        ],
-                                    ],
-                                    "simple_changelog" => [
-                                        "summary" =>
-                                            "Exemple de changelog simple",
-                                        "value" => [
-                                            "changelog" =>
-                                                "Version 2.0.0\n\nNouvelles fonctionnalités:\n- Authentification OAuth\n- UI redesignée\n\nBugfixes:\n- Problème iOS résolu",
-                                        ],
-                                    ],
-                                ],
-                            ],
-                        ],
-                        "description" =>
-                            "Le changelog doit être fourni au format texte, peut inclure du Markdown pour un meilleur formatage",
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" => "Changelog mise à jour",
-                        ],
-                        "400" => [
-                            "description" =>
-                                "Contenu du changelog non spécifié",
-                        ],
-                        "403" => [
-                            "description" =>
-                                "Accès non autorisé à cette application",
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [["ApiKeyAuth" => []]],
-                ],
-                "get" => [
-                    "tags" => ["apps • changelog"],
-                    "summary" =>
-                        'Obtenir le changelog d\'une application en JSON',
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => 'Identifiant de l\'application',
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" => 'Changelog de l\'application',
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/apps/{appId}/changelog/web" => [
-                "get" => [
-                    "tags" => ["apps • changelog"],
-                    "summary" => "Afficher le changelog en HTML pour le web",
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => 'Identifiant de l\'application',
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" => "Page HTML",
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/apps/{appId}/changelog/raw" => [
-                "get" => [
-                    "tags" => ["apps • changelog"],
-                    "summary" =>
-                        'Obtenir le changelog d\'une application en texte brut',
-                    "parameters" => [
-                        [
-                            "name" => "appId",
-                            "in" => "path",
-                            "required" => true,
-                            "schema" => ["type" => "string"],
-                            "description" => 'Identifiant de l\'application',
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" =>
-                                "Contenue du fichier changelog brute (txt où md)",
-                        ],
-                        "404" => ["description" => "Application non trouvée"],
-                    ],
-                    "security" => [], // Route publique
-                ],
-            ],
-            "/cpu" => [
-                "get" => [
-                    "tags" => ["benchmark"],
-                    "summary" => "Récupère les données CPU en JSON",
-                    "description" =>
-                        "Ne pas utiliser la fonction Try It Out (crash de la page), appeler la page depuis votre navigateur directement pour tester. (eg: https://" .
-                        config("hostname") .
-                        "/api/cpu )",
-                    "responses" => [
-                        "200" => [
-                            "description" => "Liste des benchmarks CPU",
-                            "content" => [
-                                "application/json" => [
-                                    "schema" => [
-                                        "type" => "array",
-                                        "items" => [
-                                            "type" => "object",
-                                        ],
-                                    ],
-                                ],
-                            ],
-                        ],
-                    ],
-                    "security" => [],
-                ],
-            ],
-            "/cpu/csv" => [
-                "get" => [
-                    "tags" => ["benchmark"],
-                    "summary" => "Récupère les données CPU en CSV",
-                    "description" =>
-                        "Ne pas utiliser la fonction Try It Out (crash de la page), appeler la page depuis votre navigateur directement pour tester. (eg: https://" .
-                        config("hostname") .
-                        "/api/cpu/csv )",
-                    "x-swagger-ui-disable-try-it-out" => "true",
-                    "responses" => [
-                        "200" => [
-                            "description" => "Fichier CSV des benchmarks CPU",
-                            "content" => [
-                                "text/csv" => [
-                                    "schema" => [
-                                        "type" => "string",
-                                        "format" => "binary",
-                                    ],
-                                ],
-                            ],
-                        ],
-                    ],
-                    "security" => [],
-                ],
-            ],
-            "/version" => [
-                "get" => [
-                    "tags" => ["api"],
-                    "summary" => 'Retourne la version actuelle de l\'API',
-                    "description" => "",
-                    "responses" => [
-                        "200" => [
-                            "description" =>
-                                'Numéro de version actuelle de l\'API',
-                        ],
-                    ],
-                ],
-            ],
-            "/logs" => [
-                "get" => [
-                    "tags" => ["api"],
-                    "summary" => 'Consulter les logs d\'utilisation de l\'API',
-                    "description" =>
-                        "Accès réservé aux administrateurs (ACL 10+)",
-                    "parameters" => [
-                        [
-                            "name" => "limit",
-                            "in" => "query",
-                            "required" => false,
-                            "schema" => ["type" => "integer", "default" => 100],
-                            "description" =>
-                                'Nombre maximum d\'entrées à retourner',
-                        ],
-                        [
-                            "name" => "filter",
-                            "in" => "query",
-                            "required" => false,
-                            "schema" => ["type" => "string"],
-                            "description" =>
-                                "Filtre textuel sur les entrées de log",
-                        ],
-                        [
-                            "name" => "date",
-                            "in" => "query",
-                            "required" => false,
-                            "schema" => [
-                                "type" => "string",
-                                "format" => "date",
-                            ],
-                            "description" =>
-                                "Filtre par date (format YYYY-MM-DD)",
-                        ],
-                    ],
-                    "responses" => [
-                        "200" => [
-                            "description" => 'Liste des logs d\'utilisation',
-                            "content" => [
-                                "application/json" => [
-                                    "schema" => [
-                                        "type" => "object",
-                                        "properties" => [
-                                            "count" => ["type" => "integer"],
-                                            "logs" => [
-                                                "type" => "array",
-                                                "items" => [
-                                                    "type" => "object",
-                                                    "properties" => [
-                                                        "timestamp" => [
-                                                            "type" => "string",
-                                                        ],
-                                                        "identifier" => [
-                                                            "type" => "string",
-                                                        ],
-                                                        "endpoint" => [
-                                                            "type" => "string",
-                                                        ],
-                                                        "ip" => [
-                                                            "type" => "string",
-                                                        ],
-                                                        "user_agent" => [
-                                                            "type" => "string",
-                                                        ],
-                                                    ],
-                                                ],
-                                            ],
-                                            "filters" => [
-                                                "type" => "object",
-                                                "properties" => [
-                                                    "limit" => [
-                                                        "type" => "integer",
-                                                    ],
-                                                    "filter" => [
-                                                        "type" => "string",
-                                                    ],
-                                                    "date" => [
-                                                        "type" => "string",
-                                                    ],
-                                                ],
-                                            ],
-                                        ],
-                                    ],
-                                ],
-                            ],
-                        ],
-                        "401" => ["description" => "Non authentifié"],
-                        "403" => [
-                            "description" => 'Niveau d\'accès insuffisant',
-                        ],
-                        "404" => ["description" => "Fichier de log non trouvé"],
-                    ],
-                    "security" => [["ApiKeyAuth" => []]],
-                ],
-            ],
-        ],
-        "components" => [
-            "securitySchemes" => [
-                "ApiKeyAuth" => [
-                    "type" => "apiKey",
-                    "in" => "header",
-                    "name" => "X-API-Key",
-                ],
-            ],
-        ],
-    ];
-
-    sendResponse(200, $swagger);
+    
+    return json_decode($data, true);
 }
 
 function fetchCpuBenchmarkData(): ?array
@@ -3101,7 +3780,7 @@ function fetchCpuBenchmarkData(): ?array
     ]);
     $response = curl_exec($ch);
     $curlErr = curl_error($ch);
-    curl_close($ch);
+    // curl_close($ch);
 
     if (!$response || !preg_match("/PHPSESSID=([^;]+)/", $response, $matches)) {
         sendResponse(504, [
@@ -3131,7 +3810,7 @@ function fetchCpuBenchmarkData(): ?array
     $data = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlErr = curl_error($ch);
-    curl_close($ch);
+    // curl_close($ch);
 
     if (!$data) {
         sendResponse(504, [
@@ -3159,40 +3838,224 @@ function fetchCpuBenchmarkData(): ?array
         return null;
     }
 
-    return $json["data"];
+    return $json;
 }
 
-function getCpuBenchmark(): void
+function testWebFetch(): void
 {
-    $data = fetchCpuBenchmarkData();
-    if ($data !== null) {
-        header("Content-Type: application/json");
-        echo json_encode($data);
-    }
+    $url = "https://ping.drop.tf";
+    
+    $curl = curl_init($url);
+    curl_setopt($curl, CURLOPT_URL, $url);
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($curl, CURLOPT_TIMEOUT, 10);
+    curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false);
+    
+    $response = curl_exec($curl);
+    $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+    $error = curl_error($curl);
+    
+    // curl_close($curl);
+    
+    $result = [
+        'url' => $url,
+        'http_code' => $httpCode,
+        'success' => ($response !== false && $httpCode == 200),
+        'error' => $error ?: null,
+        'content_length' => $response ? strlen($response) : 0,
+        'content_preview' => $response ? substr($response, 0, 200) : null
+    ];
+    
+    header('Content-Type: application/json');
+    echo json_encode($result, JSON_PRETTY_PRINT);
 }
 
-function getCpuBenchmarkCSV(): void
+function cpuJSON(): void
 {
-    $data = fetchCpuBenchmarkData();
-    if ($data === null) {
+    $benchmarkData = fetchCpuBenchmarkDataProxied();
+    
+    if ($benchmarkData === null) {
+        // L'erreur a déjà été gérée par fetchCpuBenchmarkDataProxied()
         return;
     }
+    
+    sendResponse(200, $benchmarkData);
+}
 
-    header("Content-Type: text/csv");
-    header('Content-Disposition: attachment; filename="benchmark.csv"');
+function cpuDebug(): void 
+{
+    $cpumarksPath = config('cpumarks_path');
 
-    $fp = fopen("php://output", "w");
-    $first = true;
+    // === DEBUG: Vérifions la structure ===
+    echo "=== DEBUG INFO ===\n";
+    echo "cpumarksPath: $cpumarksPath\n";
+    echo "PHP __DIR__: " . __DIR__ . "\n";
+    echo "Home directory: " . shell_exec("echo ~") . "\n";
+    echo "Current working directory: " . shell_exec("pwd") . "\n";
+    
+    echo "\n=== Listing cpumarksPath directory ===\n";
+    echo shell_exec("ls -la " . escapeshellarg($cpumarksPath));
+    
+    echo "\n=== Checking for Python ===\n";
+    echo "Looking for: $cpumarksPath/venv/bin/python\n";
+    echo "Exists? " . (file_exists("$cpumarksPath/venv/bin/python") ? "YES" : "NO") . "\n";
+    
+    echo "\n=== Available Python ===\n";
+    echo shell_exec("which python3");
+    echo shell_exec("python3 --version");
+    
+    echo "\n=== Looking for venv ===\n";
+    echo shell_exec("find $cpumarksPath -name 'python' -o -name 'python3' 2>&1");
+}
 
-    foreach ($data as $row) {
-        if ($first) {
-            fputcsv($fp, array_keys($row));
-            $first = false;
+/**
+ * Updates CPU marks database via PHP fetch + Python processing
+ * Workaround for OVH mutualized hosting where CLI can't fetch external sites
+ */
+function cpuUpdateDB(): void 
+{
+    $cpumarksPath = config('cpumarks_path'); // Chemin absolu vers le dossier cpumarks
+    $prefetchJsonFile = $cpumarksPath . '/cpumarks-prefetch.json';
+
+    // Save to prefetch JSON file
+    $data = fetchCpuBenchmarkDataProxied();
+    file_put_contents($prefetchJsonFile, json_encode($data['data'], JSON_PRETTY_PRINT));
+
+    // Step 2: Run Python update script with environment variable
+    $pythonBin = "$cpumarksPath/venv/bin/python";
+    $updateScript = "$cpumarksPath/marksdata/update_the_db.py";
+    
+    // Set environment variable and run Python script
+    $command = "CPU_MARKS_PREFETCH_JSON=" . escapeshellarg($prefetchJsonFile) . " $pythonBin $updateScript 2>&1";
+    $output = shell_exec($command);
+
+    // Parse Python output to check success
+    $lines = explode("\n", trim($output));
+    $lastLine = end($lines);
+    $result = json_decode($lastLine, true);
+    
+    if ($result && $result['status'] === 'success') {
+        echo $output;
+        
+        // Cleanup prefetch file
+        if (file_exists($prefetchJsonFile)) {
+            unlink($prefetchJsonFile);
         }
-        fputcsv($fp, $row);
+    } else {   
+        if ($result && isset($result['reason'])) {
+            sendResponse(400, [
+                "error" => true,
+                "message" => "Erreur lors de la mise à jour du CSV",
+                "reason" => $result['reason']
+            ]);
+        } else {
+            sendResponse(400, [
+                "error" => true,
+                "message" => "Erreur lors de la mise à jour du CSV"
+            ]);
+        }
     }
+}
 
-    fclose($fp);
+/**
+ * Get CPU benchmark by name
+ * @param string $cpuName The CPU name from the URL
+ */
+function cpuMark($cpuName)
+{
+    // Decode URL-encoded characters (e.g., spaces)
+    $cpuName = urldecode($cpuName);
+    
+    // Prevent accessing the reserved endpoints
+    $reservedEndpoints = ['update', 'version', 'debug', 'csv'];
+    if (in_array(strtolower($cpuName), $reservedEndpoints)) {
+        sendResponse(400, [
+            "error" => true,
+            "message" => "Invalid CPU name"
+        ]);
+        return;
+    }
+    
+    $cpumarksPath = config('cpumarks_path');
+    $pythonBin = "$cpumarksPath/venv/bin/python";
+    $lookupScript = "$cpumarksPath/marklookup/get_mark_of_cpu.py";
+    
+    $escapedCpu = escapeshellarg($cpuName);
+    $command = "$pythonBin $lookupScript --json -c $escapedCpu 2>&1";
+    
+    $output = shell_exec($command);
+    
+    if (!$output) {
+        sendResponse(500, [
+            "error" => true,
+            "message" => "Failed to execute CPU lookup"
+        ]);
+        return;
+    }
+    
+    $result = json_decode($output, true);
+    
+    if (!$result) {
+        sendResponse(500, [
+            "error" => true,
+            "message" => "Invalid response from CPU lookup script",
+            "raw_output" => $output
+        ]);
+        return;
+    }
+    
+    header("Content-Type: application/json");
+    echo json_encode($result);
+}
+
+/**
+ * Download the latest cached CSV file
+ */
+function cpuCSV(): void
+{
+    $cpumarksPath = config('cpumarks_path');
+    $symlinkPath = "$cpumarksPath/marksdata/cpumarks.csv";
+    
+    if (!file_exists($symlinkPath)) {
+        http_response_code(404);
+        header("Content-Type: application/json");
+        echo json_encode([
+            "error" => true,
+            "message" => "Fichier introuvable"
+        ]);
+        return;
+    }
+    
+    // Get actual file path
+    if (is_link($symlinkPath)) {
+        $targetFile = readlink($symlinkPath);
+        $fullPath = "$cpumarksPath/marksdata/$targetFile";
+    } else {
+        $fullPath = $symlinkPath;
+        $targetFile = basename($symlinkPath);
+    }
+    
+    // Send file as download
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $targetFile . '"');
+    header('Content-Length: ' . filesize($fullPath));
+    
+    readfile($fullPath);
+}
+
+function cpuVersion(): void 
+{
+    $cpumarksPath = config('cpumarks_path');
+    $pythonBin = "$cpumarksPath/venv/bin/python";
+    $versionScript = "$cpumarksPath/get_version.py";
+    
+    $output = shell_exec("$pythonBin $versionScript 2>&1");
+    $data = json_decode($output, true);
+    
+    header("Content-Type: application/json");
+    echo json_encode($data);
 }
 
 // Fonctions utilitaires
