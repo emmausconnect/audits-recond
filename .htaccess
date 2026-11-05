@@ -6,7 +6,7 @@ Header unset server
 # Désactiver l'indexation des fichiers et dossiers
 Options -Indexes
 # Protéger les fichiers
-<FilesMatch "^(\.htaccess|\.gitignore|config\.php|config\.ini|composer\.json|composer\.lock|composer\.php|.*\.sh)$">
+<FilesMatch "^(\.htaccess|\.gitignore|config\.php|config\.ini|composer\.json|composer\.lock|composer\.php|.*\.sh|MEMORY\.md|memory\.md)$">
     Order Allow,Deny
     Deny from all
 </FilesMatch>
