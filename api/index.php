@@ -122,10 +122,6 @@ $routes = [
             "handler" => "getAppChangelogRaw",
             "acl" => 0,
         ],
-        "/cpu/update" => [
-            "handler" => "cpuUpdateDB",
-            "acl" => 0,
-        ],
         "/cpu/version" => [
             "handler" => "cpuVersion",
             "acl" => 0,
@@ -163,6 +159,11 @@ $routes = [
         "/apps/([a-zA-Z0-9_-]+)/changelog/?" => [
             "handler" => "uploadAppChangelog",
             "acl" => 5,
+        ],
+        // mise à jour du CSV des benchmarks CPU (maintenance, ACL 8+)
+        "/cpu/update/?" => [
+            "handler" => "cpuUpdateDB",
+            "acl" => 8,
         ],
     ],
     "PUT" => [
@@ -4404,11 +4405,11 @@ function addCurlCodeSamples($swagger)
                  ],
              ],
              "/cpu/update" => [
-                 "get" => [
+                 "post" => [
                      "tags" => ["benchmark / cpu"],
                      "summary" => "Mettre à jour le CSV des benchmarks CPU",
                      "description" =>
-                         "Récupère les données via le proxy, écrit `cpumarks-prefetch.json`, puis exécute `marksdata/update_the_db.py` avec le venv Python. Opération de maintenance potentiellement longue : elle remplace le CSV courant. En cas de succès, renvoie la sortie texte du script (JSON par ligne).",
+                         "Récupère les données via le proxy, écrit `cpumarks-prefetch.json`, puis exécute `marksdata/update_the_db.py` avec le venv Python. Opération de maintenance potentiellement longue : elle remplace le CSV courant. En cas de succès, renvoie la sortie texte du script (JSON par ligne). Requiert une clé API.",
                      "responses" => [
                          "200" => [
                              "description" => "Mise à jour effectuée (sortie du script Python)",
@@ -4419,9 +4420,11 @@ function addCurlCodeSamples($swagger)
                              ],
                          ],
                          "400" => ["description" => "Échec de la mise à jour (raison dans `reason` si disponible)"],
+                         "401" => ["description" => "Clé API manquante ou invalide"],
+                         "403" => ["description" => "Accès non autorisé"],
                          "504" => ["description" => "Proxy cpubenchmark indisponible"],
                      ],
-                     "security" => [],
+                     "security" => [["ApiKeyAuth" => []]],
                  ],
              ],
              "/cpu/debug" => [
@@ -4746,13 +4749,22 @@ function cpuDebug(): void
  * Updates CPU marks database via PHP fetch + Python processing
  * Workaround for OVH mutualized hosting where CLI can't fetch external sites
  */
-function cpuUpdateDB(): void 
+function cpuUpdateDB($entity = null): void
 {
     $cpumarksPath = config('cpumarks_path'); // Chemin absolu vers le dossier cpumarks
     $prefetchJsonFile = $cpumarksPath . '/cpumarks-prefetch.json';
 
     // Save to prefetch JSON file
     $data = fetchCpuBenchmarkDataProxied();
+
+    if ($data === null || !isset($data['data'])) {
+        sendResponse(504, [
+            "error" => true,
+            "message" => "Proxy cpubenchmark indisponible",
+        ]);
+        return;
+    }
+
     file_put_contents($prefetchJsonFile, json_encode($data['data'], JSON_PRETTY_PRINT));
 
     // Step 2: Run Python update script with environment variable
@@ -4799,9 +4811,21 @@ function cpuMark($cpuName)
 {
     // Decode URL-encoded characters (e.g., spaces)
     $cpuName = urldecode($cpuName);
-    
+
+    // /cpu/update n'existe qu'en POST : répondre 405 plutôt que 400
+    if (strtolower($cpuName) === 'update') {
+        header("Allow: POST");
+        sendResponse(405, [
+            "error" => true,
+            "message" => "Méthode GET non supportée pour ce chemin. Méthodes supportées: POST",
+            "requested_path" => "/api/cpu/update",
+            "supportedMethods" => ["POST"],
+        ]);
+        return;
+    }
+
     // Prevent accessing the reserved endpoints
-    $reservedEndpoints = ['update', 'version', 'debug', 'csv'];
+    $reservedEndpoints = ['version', 'debug', 'csv'];
     if (in_array(strtolower($cpuName), $reservedEndpoints)) {
         sendResponse(400, [
             "error" => true,

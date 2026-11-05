@@ -1,7 +1,7 @@
 <?php
 
 return [
-    "version" => "1.10.1",
+    "version" => "1.11.0",
     "debug" => false,
     "hostname" =>
         php_sapi_name() === "cli" ? "localhost" : $_SERVER["HTTP_HOST"],
