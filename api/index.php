@@ -4229,7 +4229,7 @@ function addCurlCodeSamples($swagger)
              ],
              "/cpu/json" => [
                  "get" => [
-                     "tags" => ["benchmark"],
+                     "tags" => ["benchmark / cpu"],
                      "summary" => "Jeu de données complet des benchmarks CPU",
                      "description" =>
                          "Données cpubenchmark.net relayées par le proxy interne (`cpubenchmark.drop.tf`), utilisées par `/api/cpu/update` pour régénérer le CSV. Réponse volumineuse (≈ 6 800 entrées) : ouvrir l'URL dans un onglet plutôt que d'utiliser « Try it out ».",
@@ -4284,7 +4284,7 @@ function addCurlCodeSamples($swagger)
              ],
              "/cpu/{cpuName}" => [
                  "get" => [
-                     "tags" => ["benchmark"],
+                     "tags" => ["benchmark / cpu"],
                      "summary" => "Indice de performance d'un CPU",
                      "description" =>
                          "Recherche le CPU dans le CSV courant via l'algorithme de matching (`get_mark_of_cpu.py --json`). Le nom est comparé aux libellés BIOS (espaces, parenthèses, `@ fréquence` tolérés). Encoder le nom dans l'URL.",
@@ -4355,7 +4355,7 @@ function addCurlCodeSamples($swagger)
              ],
              "/cpu/csv" => [
                  "get" => [
-                     "tags" => ["benchmark"],
+                     "tags" => ["benchmark / cpu"],
                      "summary" => "Téléchargement du CSV des benchmarks CPU",
                      "description" =>
                          "Renvoie le CSV courant (cible du lien symbolique `marksdata/cpumarks.csv`) en pièce jointe. Le nom de fichier est daté (ex. `cpumarks-20261031.230006.csv`). Ouvrir l'URL dans le navigateur pour télécharger.",
@@ -4375,7 +4375,7 @@ function addCurlCodeSamples($swagger)
              ],
              "/cpu/version" => [
                  "get" => [
-                     "tags" => ["benchmark"],
+                     "tags" => ["benchmark / cpu"],
                      "summary" => "Version du module cpumarks et du CSV courant",
                      "description" =>
                          "Retourne la version du projet cpumarks, les auteurs, les chemins du CSV et le nombre de CPU qu'il contient.",
@@ -4405,7 +4405,7 @@ function addCurlCodeSamples($swagger)
              ],
              "/cpu/update" => [
                  "get" => [
-                     "tags" => ["benchmark"],
+                     "tags" => ["benchmark / cpu"],
                      "summary" => "Mettre à jour le CSV des benchmarks CPU",
                      "description" =>
                          "Récupère les données via le proxy, écrit `cpumarks-prefetch.json`, puis exécute `marksdata/update_the_db.py` avec le venv Python. Opération de maintenance potentiellement longue : elle remplace le CSV courant. En cas de succès, renvoie la sortie texte du script (JSON par ligne).",
@@ -4426,7 +4426,7 @@ function addCurlCodeSamples($swagger)
              ],
              "/cpu/debug" => [
                  "get" => [
-                     "tags" => ["benchmark"],
+                     "tags" => ["benchmark / cpu"],
                      "summary" => "Diagnostic de l'environnement cpumarks",
                      "description" =>
                          "Endpoint de diagnostic : chemins configurés, présence du venv Python, version de Python, contenu du dossier cpumarks. Réponse en texte brut, réservée au dépannage.",
