@@ -81,6 +81,8 @@ $routes = [
         "/doc" => ["handler" => "getApiDocumentation", "acl" => 0],
         "/" => ["handler" => "redirSwagger", "acl" => 0],
         "/logs/?" => ["handler" => "getLogs", "acl" => 10],
+        // identité associée à la clé API (utilisé par la doc Swagger)
+        "/whoami/?" => ["handler" => "getWhoAmI", "acl" => 1],
         // endpoints pour les applications
         "/apps/?" => ["handler" => "getApps", "acl" => 0],
         "/apps/web?" => ["handler" => "getAppsWeb", "acl" => 0],
@@ -174,6 +176,18 @@ $routes = [
             "acl" => 5,
         ],
     ],
+    "DELETE" => [
+        // Supprimer une version précise de l'application (admin de l'app, ACL 8+)
+        "/apps/([a-zA-Z0-9_-]+)/versions/([0-9]+\.[0-9]+\.[0-9]+)/?" => [
+            "handler" => "deleteAppVersion",
+            "acl" => 8,
+        ],
+        // Purger les anciennes versions en ne gardant que les N plus récentes
+        "/apps/([a-zA-Z0-9_-]+)/versions/?" => [
+            "handler" => "pruneAppVersions",
+            "acl" => 8,
+        ],
+    ],
 ];
 
 // Router
@@ -215,8 +229,12 @@ foreach ($routes[$request_method] ?? [] as $pattern => $route) {
                     ]);
                 }
 
-                // Journaliser l'utilisation pour les requêtes POST ou PUT
-                if ($request_method === "POST" || $request_method === "PUT") {
+                // Journaliser l'utilisation pour les requêtes POST, PUT ou DELETE
+                if (
+                    $request_method === "POST" ||
+                    $request_method === "PUT" ||
+                    $request_method === "DELETE"
+                ) {
                     // Si l'utilisateur est authentifié, passez l'entité d'authentification
                     if (isset($authenticatedEntity)) {
                         logApiUsage(
@@ -289,6 +307,22 @@ function getApiVersion()
 {
     $version = config("version");
     sendResponse(200, ["apiVersion" => $version]);
+}
+
+/**
+ * Retourner l'identité associée à la clé API utilisée
+ * GET /whoami — permet notamment à la doc Swagger de préremplir appId
+ * @param array $entity Entité authentifiée (injectée par le routeur)
+ */
+function getWhoAmI($entity)
+{
+    sendResponse(200, [
+        "type" => $entity["type"],
+        "appId" => $entity["type"] === "app" ? $entity["name"] : null,
+        "acl" => $entity["acl"],
+        "description" => $entity["description"] ?? null,
+        "key_description" => $entity["key_description"] ?? null,
+    ]);
 }
 
 function getRegions()
@@ -2971,6 +3005,510 @@ function uploadAppChangelog($user, $appId)
      }
  }
 
+/**
+ * Lister les numéros de version présents sur le disque (formats legacy et multi-plateformes)
+ * @param string $appId Identifiant de l'application
+ * @return array Liste des versions x.y.z (sans doublons)
+ */
+function getAppVersionNumbers($appId)
+{
+    $versionsDir = getAppVersionsDirectory($appId);
+    $versions = [];
+
+    foreach (scandir($versionsDir) as $item) {
+        if ($item === "." || $item === "..") {
+            continue;
+        }
+
+        $itemPath = $versionsDir . "/" . $item;
+
+        if (
+            is_dir($itemPath) &&
+            preg_match('/^([0-9]+\.[0-9]+\.[0-9]+)$/', $item, $matches)
+        ) {
+            $versions[] = $matches[1];
+        } elseif (
+            is_file($itemPath) &&
+            preg_match('/^([0-9]+\.[0-9]+\.[0-9]+)\..*$/', $item, $matches)
+        ) {
+            $versions[] = $matches[1];
+        }
+    }
+
+    return array_values(array_unique($versions));
+}
+
+/**
+ * Supprimer les fichiers d'une version (répertoire multi-plateformes ou fichier legacy)
+ * @param string $appId Identifiant de l'application
+ * @param string $version Numéro de version (x.y.z)
+ * @return array Liste des fichiers supprimés
+ * @throws RuntimeException Si la suppression échoue
+ */
+function removeAppVersionFiles($appId, $version)
+{
+    $versionsDir = getAppVersionsDirectory($appId);
+    $versionDir = $versionsDir . "/" . $version;
+    $deleted = [];
+
+    // Format multi-plateformes : un répertoire par version
+    if (is_dir($versionDir)) {
+        foreach (scandir($versionDir) as $item) {
+            if ($item === "." || $item === "..") {
+                continue;
+            }
+
+            $filePath = $versionDir . "/" . $item;
+
+            if (!is_file($filePath)) {
+                throw new RuntimeException(
+                    "Le répertoire de la version " .
+                        $version .
+                        " contient un élément non supporté : " .
+                        $item
+                );
+            }
+
+            if (!@unlink($filePath)) {
+                throw new RuntimeException(
+                    "Échec de la suppression du fichier " . $item
+                );
+            }
+
+            $deleted[] = $version . "/" . $item;
+        }
+
+        if (!@rmdir($versionDir)) {
+            throw new RuntimeException(
+                "Échec de la suppression du répertoire de la version " . $version
+            );
+        }
+
+        return $deleted;
+    }
+
+    // Format legacy : fichier(x) version.extension
+    $files = glob($versionsDir . "/" . $version . ".*");
+    if (empty($files)) {
+        return [];
+    }
+
+    foreach ($files as $file) {
+        if (!@unlink($file)) {
+            throw new RuntimeException(
+                "Échec de la suppression du fichier " . basename($file)
+            );
+        }
+        $deleted[] = basename($file);
+    }
+
+    return $deleted;
+}
+
+/**
+ * Supprimer une version d'une application
+ * DELETE /apps/{appId}/versions/{version}
+ * Réservé aux clés API avec un ACL >= 8 (admin de l'application ou admin global)
+ * @param array $user Entité authentifiée
+ * @param string $appId Identifiant de l'application
+ * @param string $version Numéro de version à supprimer
+ */
+function deleteAppVersion($user, $appId, $version)
+{
+    if (!hasAppAccess($user, $appId)) {
+        sendResponse(403, [
+            "error" => true,
+            "message" => "Accès non autorisé à cette application",
+        ]);
+        return;
+    }
+
+    if (!isAppExisting($appId)) {
+        sendResponse(404, [
+            "error" => true,
+            "message" => "Application non trouvée",
+        ]);
+        return;
+    }
+
+    if (!preg_match('/^[0-9]+\.[0-9]+\.[0-9]+$/', $version)) {
+        sendResponse(400, [
+            "error" => true,
+            "message" => "Format de version invalide, doit être x.y.z",
+        ]);
+        return;
+    }
+
+    $appInfo = getAppInfo($appId);
+    $currentVersion = $appInfo["current_version"] ?? null;
+
+    if ($currentVersion !== null && $version === $currentVersion) {
+        sendResponse(409, [
+            "error" => true,
+            "message" =>
+                "Impossible de supprimer la version actuelle (" .
+                $currentVersion .
+                "). Publiez d'abord une version plus récente.",
+        ]);
+        return;
+    }
+
+    if (!in_array($version, getAppVersionNumbers($appId), true)) {
+        sendResponse(404, [
+            "error" => true,
+            "message" => "Version non trouvée",
+        ]);
+        return;
+    }
+
+    try {
+        $deleted = removeAppVersionFiles($appId, $version);
+    } catch (RuntimeException $e) {
+        sendResponse(500, [
+            "error" => true,
+            "message" => $e->getMessage(),
+        ]);
+        return;
+    }
+
+    sendResponse(200, [
+        "error" => false,
+        "message" => "Version supprimée avec succès",
+        "appId" => $appId,
+        "version" => $version,
+        "deleted_files" => $deleted,
+    ]);
+}
+
+/**
+ * Purger les anciennes versions d'une application
+ * DELETE /apps/{appId}/versions?keep=2&dry_run=false
+ * Conserve toujours la version actuelle et les `keep` versions les plus récentes.
+ * Réservé aux clés API avec un ACL >= 8 (admin de l'application ou admin global)
+ * @param array $user Entité authentifiée
+ * @param string $appId Identifiant de l'application
+ */
+function pruneAppVersions($user, $appId)
+{
+    if (!hasAppAccess($user, $appId)) {
+        sendResponse(403, [
+            "error" => true,
+            "message" => "Accès non autorisé à cette application",
+        ]);
+        return;
+    }
+
+    if (!isAppExisting($appId)) {
+        sendResponse(404, [
+            "error" => true,
+            "message" => "Application non trouvée",
+        ]);
+        return;
+    }
+
+    // `keep` est obligatoire : évite qu'un appel accidentel (ex. version vide
+    // dans Swagger) ne déclenche une purge massive avec la valeur par défaut.
+    if (!isset($_GET["keep"]) || $_GET["keep"] === "") {
+        sendResponse(400, [
+            "error" => true,
+            "message" =>
+                "Paramètre 'keep' requis pour purger les anciennes versions (ex: ?keep=2&dry_run=true)",
+        ]);
+        return;
+    }
+
+    $keep = (int) $_GET["keep"];
+    if ($keep < 0) {
+        sendResponse(400, [
+            "error" => true,
+            "message" => "Le paramètre keep doit être un entier positif ou nul",
+        ]);
+        return;
+    }
+
+    $dryRun = filter_var($_GET["dry_run"] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+    $appInfo = getAppInfo($appId);
+    $currentVersion = $appInfo["current_version"] ?? null;
+
+    $versions = getAppVersionNumbers($appId);
+    usort($versions, function ($a, $b) {
+        return version_compare($b, $a);
+    });
+
+    // Garder les N versions les plus récentes + toujours la version actuelle
+    $protectedVersions = array_slice($versions, 0, $keep);
+    if ($currentVersion !== null && in_array($currentVersion, $versions, true)) {
+        $protectedVersions[] = $currentVersion;
+    }
+    $protectedVersions = array_values(array_unique($protectedVersions));
+
+    $toDelete = array_values(array_diff($versions, $protectedVersions));
+    $deleted = [];
+
+    if (!$dryRun) {
+        foreach ($toDelete as $version) {
+            try {
+                $files = removeAppVersionFiles($appId, $version);
+            } catch (RuntimeException $e) {
+                sendResponse(500, [
+                    "error" => true,
+                    "message" => $e->getMessage(),
+                    "deleted_versions" => $deleted,
+                ]);
+                return;
+            }
+            $deleted[$version] = $files;
+        }
+    }
+
+    sendResponse(200, [
+        "error" => false,
+        "message" => $dryRun
+            ? "Simulation : aucune version supprimée"
+            : "Anciennes versions supprimées avec succès",
+        "appId" => $appId,
+        "keep" => $keep,
+        "dry_run" => $dryRun,
+        "current_version" => $currentVersion,
+        "protected_versions" => $protectedVersions,
+        "deleted_versions" => $dryRun ? $toDelete : array_keys($deleted),
+        "deleted_files" => $dryRun ? [] : $deleted,
+    ]);
+}
+
+/**
+ * Produire une valeur d'exemple à partir d'un schéma OpenAPI
+ * @param array $schema Schéma OpenAPI
+ * @return mixed Valeur d'exemple
+ */
+function buildJsonValueFromSchema($schema)
+{
+    if (!is_array($schema)) {
+        return "";
+    }
+
+    if (array_key_exists("example", $schema)) {
+        return $schema["example"];
+    }
+
+    if (array_key_exists("default", $schema)) {
+        return $schema["default"];
+    }
+
+    $type = $schema["type"] ?? null;
+
+    if ($type === "object") {
+        return buildJsonExampleFromSchema($schema);
+    }
+
+    if ($type === "array") {
+        return [buildJsonValueFromSchema($schema["items"] ?? [])];
+    }
+
+    if ($type === "integer" || $type === "number") {
+        return 0;
+    }
+
+    if ($type === "boolean") {
+        return false;
+    }
+
+    return "";
+}
+
+/**
+ * Construire un objet JSON d'exemple à partir d'un schéma OpenAPI
+ * @param array $schema Schéma de type object
+ * @return array
+ */
+function buildJsonExampleFromSchema($schema)
+{
+    $example = [];
+
+    foreach ($schema["properties"] ?? [] as $name => $property) {
+        $example[$name] = buildJsonValueFromSchema($property);
+    }
+
+    return $example;
+}
+
+/**
+ * Échapper une chaîne pour l'insérer entre apostrophes simples en shell
+ * @param string $value Valeur à échapper
+ * @return string Valeur entourée d'apostrophes et échappée
+ */
+function shellSingleQuoted($value)
+{
+    return "'" . str_replace("'", "'\\''", (string) $value) . "'";
+}
+
+/**
+ * Générer un exemple cURL pour une opération OpenAPI
+ * @param string $method Méthode HTTP
+ * @param string $path Chemin OpenAPI (avec paramètres {…})
+ * @param array $operation Définition de l'opération
+ * @param string $baseUrl URL de base du serveur
+ * @return string Commande cURL prête à copier
+ */
+function buildCurlExample($method, $path, $operation, $baseUrl)
+{
+    $method = strtoupper($method);
+
+    $pathExamples = [
+        "appId" => "mon-app",
+        "version" => "1.2.3",
+        "platform" => "windows",
+        "regionCode" => "ST",
+        "cpuName" => "Intel Core i7-12700",
+        "ecid" => "STPC29-0000",
+        "region" => "ST",
+    ];
+
+    $binaryExamples = [
+        "file" => "app.zip",
+        "actual_file" => "audit.zip",
+        "changelog_file" => "changelog.md",
+    ];
+
+    // Remplacer les paramètres de chemin par des valeurs d'exemple
+    $url = rtrim($baseUrl, "/") . preg_replace_callback(
+        '/\{([A-Za-z0-9_]+)\}/',
+        function ($matches) use ($pathExamples) {
+            return $pathExamples[$matches[1]] ?? $matches[1];
+        },
+        $path
+    );
+
+    // Paramètres de requête
+    $query = [];
+    foreach ($operation["parameters"] ?? [] as $parameter) {
+        if (($parameter["in"] ?? null) !== "query") {
+            continue;
+        }
+
+        $name = $parameter["name"] ?? "";
+        if ($name === "") {
+            continue;
+        }
+
+        $schema = $parameter["schema"] ?? [];
+        $value = $schema["example"] ?? ($schema["default"] ?? ($pathExamples[$name] ?? null));
+
+        if ($value === null) {
+            if (empty($parameter["required"])) {
+                continue;
+            }
+            $value = "<" . $name . ">";
+        }
+
+        if (is_bool($value)) {
+            $value = $value ? "true" : "false";
+        }
+
+        $query[] =
+            rawurlencode($name) . "=" . rawurlencode((string) $value);
+    }
+
+    if (!empty($query)) {
+        $url .= (strpos($url, "?") === false ? "?" : "&") . implode("&", $query);
+    }
+
+    $lines = [
+        ($method === "GET" ? "curl" : "curl -X " . $method) . " " . shellSingleQuoted($url),
+    ];
+
+    // Authentification
+    if (!empty($operation["security"])) {
+        $lines[] = '  -H "X-API-Key: $API_KEY"';
+    }
+
+    // Corps JSON
+    $content = $operation["requestBody"]["content"] ?? [];
+
+    if (isset($content["application/json"]["schema"])) {
+        $body = buildJsonExampleFromSchema($content["application/json"]["schema"]);
+        $lines[] = '  -H "Content-Type: application/json"';
+        $lines[] =
+            "  -d " .
+            shellSingleQuoted(
+                json_encode(
+                    $body,
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+                )
+            );
+    }
+
+    // Corps multipart/form-data
+    if (isset($content["multipart/form-data"]["schema"])) {
+        $schema = $content["multipart/form-data"]["schema"];
+
+        foreach ($schema["properties"] ?? [] as $name => $property) {
+            if (($property["format"] ?? null) === "binary") {
+                $filename = $binaryExamples[$name] ?? $name;
+                $lines[] = '  -F "' . $name . '=@/chemin/vers/' . $filename . '"';
+                continue;
+            }
+
+            $value = $property["example"] ?? ($property["default"] ?? ($pathExamples[$name] ?? "<" . $name . ">"));
+            if (is_bool($value)) {
+                $value = $value ? "true" : "false";
+            }
+
+            $lines[] =
+                '  -F "'
+                . $name
+                . "="
+                . str_replace('"', '\\"', (string) $value)
+                . '"';
+        }
+    }
+
+    return implode(" \\\n", $lines);
+}
+
+/**
+ * Ajouter un exemple cURL à chaque opération de la doc
+ * - `x-codeSamples` pour les outils qui le supportent (ReDoc, Stoplight…)
+ * - description Markdown pour Swagger UI (qui n'affiche pas x-codeSamples)
+ * @param array $swagger Document OpenAPI complet
+ * @return array Document enrichi
+ */
+function addCurlCodeSamples($swagger)
+{
+    $baseUrl = $swagger["servers"][0]["url"] ?? "";
+
+    foreach ($swagger["paths"] as $path => $operations) {
+        foreach ($operations as $method => $operation) {
+            if (!is_array($operation)) {
+                continue;
+            }
+
+            $curl = buildCurlExample($method, $path, $operation, $baseUrl);
+
+            if (!isset($operation["x-codeSamples"])) {
+                $swagger["paths"][$path][$method]["x-codeSamples"] = [
+                    [
+                        "lang" => "Shell",
+                        "label" => "cURL",
+                        "source" => $curl,
+                    ],
+                ];
+            }
+
+            $existingDescription = $operation["description"] ?? "";
+            $swagger["paths"][$path][$method]["description"] = trim(
+                $existingDescription .
+                    "\n\n**Exemple cURL**\n\n```bash\n" .
+                    $curl .
+                    "\n```\n"
+            );
+        }
+    }
+
+    return $swagger;
+}
+
  function getApiDocumentation()
  {
      $swagger = [
@@ -3259,6 +3797,86 @@ function uploadAppChangelog($user, $appId)
                          "404" => ["description" => "Application non trouvée"],
                      ],
                      "security" => [],
+                 ],
+             ],
+             "/apps/{appId}/versions" => [
+                 "delete" => [
+                     "tags" => ["apps"],
+                     "summary" => "Purger les anciennes versions d'une application",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                         [
+                             "name" => "keep",
+                             "in" => "query",
+                             "required" => true,
+                             "schema" => [
+                                 "type" => "integer",
+                                 "minimum" => 0,
+                                 "example" => 2,
+                             ],
+                             "description" => "Obligatoire. Nombre de versions les plus récentes à conserver (la version actuelle est toujours conservée).",
+                         ],
+                         [
+                             "name" => "dry_run",
+                             "in" => "query",
+                             "required" => false,
+                             "schema" => [
+                                 "type" => "boolean",
+                                 "default" => false,
+                                 "example" => true,
+                             ],
+                             "description" => "Simuler la suppression sans effacer les fichiers. Mettre false pour supprimer réellement.",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Anciennes versions supprimées (ou simulation effectuée)"],
+                         "400" => ["description" => "Paramètre invalide"],
+                         "403" => ["description" => "Accès non autorisé"],
+                         "404" => ["description" => "Application non trouvée"],
+                         "500" => ["description" => "Échec de la suppression"],
+                     ],
+                     "security" => [["ApiKeyAuth" => []]],
+                 ],
+             ],
+             "/apps/{appId}/versions/{version}" => [
+                 "delete" => [
+                     "tags" => ["apps"],
+                     "summary" => "Supprimer une version précise d'une application",
+                     "parameters" => [
+                         [
+                             "name" => "appId",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => ["type" => "string"],
+                             "description" => "Identifiant de l'application",
+                         ],
+                         [
+                             "name" => "version",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => [
+                                 "type" => "string",
+                                 "pattern" => "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+                                 "example" => "1.2.3",
+                             ],
+                             "description" => "Numéro de version à supprimer (format x.y.z)",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => ["description" => "Version supprimée avec succès"],
+                         "400" => ["description" => "Format de version invalide"],
+                         "403" => ["description" => "Accès non autorisé"],
+                         "404" => ["description" => "Application ou version non trouvée"],
+                         "409" => ["description" => "La version actuelle ne peut pas être supprimée"],
+                         "500" => ["description" => "Échec de la suppression"],
+                     ],
+                     "security" => [["ApiKeyAuth" => []]],
                  ],
              ],
              "/apps/{appId}/upload" => [
@@ -3658,6 +4276,41 @@ function uploadAppChangelog($user, $appId)
                      ],
                  ],
              ],
+             "/whoami" => [
+                 "get" => [
+                     "tags" => ["api"],
+                     "summary" => "Identité associée à la clé API",
+                     "description" =>
+                         "Retourne le type d'entité (app ou user), l'identifiant de l'application (appId) et le niveau ACL associés à la clé API utilisée.",
+                     "responses" => [
+                         "200" => [
+                             "description" => "Identité de la clé API",
+                             "content" => [
+                                 "application/json" => [
+                                     "schema" => [
+                                         "type" => "object",
+                                         "properties" => [
+                                             "type" => [
+                                                 "type" => "string",
+                                                 "enum" => ["app", "user"],
+                                             ],
+                                             "appId" => [
+                                                 "type" => "string",
+                                                 "nullable" => true,
+                                                 "description" => "Identifiant de l'app (null pour un utilisateur)",
+                                             ],
+                                             "acl" => ["type" => "integer"],
+                                             "description" => ["type" => "string"],
+                                         ],
+                                     ],
+                                 ],
+                             ],
+                         ],
+                         "401" => ["description" => "Non authentifié"],
+                     ],
+                     "security" => [["ApiKeyAuth" => []]],
+                 ],
+             ],
              "/logs" => [
                  "get" => [
                      "tags" => ["api"],
@@ -3739,6 +4392,9 @@ function uploadAppChangelog($user, $appId)
              ],
          ],
      ];
+
+     // Ajouter un exemple cURL à chaque endpoint
+     $swagger = addCurlCodeSamples($swagger);
 
      sendResponse(200, $swagger);
  }
