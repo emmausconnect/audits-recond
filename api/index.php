@@ -3375,7 +3375,7 @@ function buildCurlExample($method, $path, $operation, $baseUrl)
     $url = rtrim($baseUrl, "/") . preg_replace_callback(
         '/\{([A-Za-z0-9_]+)\}/',
         function ($matches) use ($pathExamples) {
-            return $pathExamples[$matches[1]] ?? $matches[1];
+            return rawurlencode($pathExamples[$matches[1]] ?? $matches[1]);
         },
         $path
     );
@@ -4227,22 +4227,128 @@ function addCurlCodeSamples($swagger)
                      "security" => [],
                  ],
              ],
-             "/cpu" => [
+             "/cpu/json" => [
                  "get" => [
                      "tags" => ["benchmark"],
-                     "summary" => "Récupère les données CPU en JSON",
+                     "summary" => "Jeu de données complet des benchmarks CPU",
                      "description" =>
-                         "Ne pas utiliser la fonction Try It Out (crash de la page), appeler la page depuis votre navigateur directement pour tester. (eg: https://" .
-                         config("hostname") . "/api/cpu )",
+                         "Données cpubenchmark.net relayées par le proxy interne (`cpubenchmark.drop.tf`), utilisées par `/api/cpu/update` pour régénérer le CSV. Réponse volumineuse (≈ 6 800 entrées) : ouvrir l'URL dans un onglet plutôt que d'utiliser « Try it out ».",
                      "responses" => [
                          "200" => [
                              "description" => "Liste des benchmarks CPU",
                              "content" => [
                                  "application/json" => [
-                                     "schema" => ["type" => "array", "items" => ["type" => "object"]],
+                                     "schema" => [
+                                         "type" => "object",
+                                         "properties" => [
+                                             "data" => [
+                                                 "type" => "array",
+                                                 "items" => [
+                                                     "type" => "object",
+                                                     "properties" => [
+                                                         "id" => ["type" => "string"],
+                                                         "name" => ["type" => "string", "description" => "Nom commercial du CPU"],
+                                                         "price" => ["type" => "string", "description" => "Prix ou \"NA\""],
+                                                         "cpumark" => ["type" => "string", "description" => "Indice de performance global"],
+                                                         "thread" => ["type" => "string", "description" => "Indice mono-thread"],
+                                                         "value" => ["type" => "string"],
+                                                         "threadValue" => ["type" => "string"],
+                                                         "tdp" => ["type" => "string"],
+                                                         "powerPerf" => ["type" => "string"],
+                                                         "date" => ["type" => "string", "description" => "Date de relevé (ex. Oct 2026)"],
+                                                         "socket" => ["type" => "string"],
+                                                         "cat" => ["type" => "string"],
+                                                         "speed" => ["type" => "string"],
+                                                         "turbo" => ["type" => "string"],
+                                                         "cpuCount" => ["type" => "integer"],
+                                                         "cores" => ["type" => "string"],
+                                                         "logicals" => ["type" => "string"],
+                                                         "secondaryCores" => ["type" => "string"],
+                                                         "secondaryLogicals" => ["type" => "string"],
+                                                         "rank" => ["type" => "integer"],
+                                                         "samples" => ["type" => "string"],
+                                                         "href" => ["type" => "string"],
+                                                         "output" => ["type" => "boolean"],
+                                                     ],
+                                                 ],
+                                             ],
+                                         ],
+                                     ],
                                  ],
                              ],
                          ],
+                         "504" => ["description" => "Proxy cpubenchmark indisponible"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/cpu/{cpuName}" => [
+                 "get" => [
+                     "tags" => ["benchmark"],
+                     "summary" => "Indice de performance d'un CPU",
+                     "description" =>
+                         "Recherche le CPU dans le CSV courant via l'algorithme de matching (`get_mark_of_cpu.py --json`). Le nom est comparé aux libellés BIOS (espaces, parenthèses, `@ fréquence` tolérés). Encoder le nom dans l'URL.",
+                     "parameters" => [
+                         [
+                             "name" => "cpuName",
+                             "in" => "path",
+                             "required" => true,
+                             "schema" => [
+                                 "type" => "string",
+                                 "example" => "Intel Core i7-12700",
+                             ],
+                             "description" => "Nom du CPU (ex. `Intel(R) Core(TM) i7-12700 CPU @ 2.10GHz`)",
+                         ],
+                     ],
+                     "responses" => [
+                         "200" => [
+                             "description" => "Résultat de la recherche",
+                             "content" => [
+                                 "application/json" => [
+                                     "schema" => [
+                                         "type" => "object",
+                                         "properties" => [
+                                             "error" => [
+                                                 "type" => "boolean",
+                                                 "description" => "true si aucun indice n'a été trouvé",
+                                             ],
+                                             "mark" => [
+                                                 "type" => "string",
+                                                 "description" => "Indice CPU (\"0\" si non trouvé)",
+                                             ],
+                                             "cpustr" => ["type" => "string", "description" => "Nom recherché"],
+                                             "hint" => [
+                                                 "type" => "string",
+                                                 "enum" => [
+                                                     "SIMPLE_0",
+                                                     "SIMPLE_1",
+                                                     "SIMPLE_2",
+                                                     "SIMPLE_3",
+                                                     "CLEVER_1",
+                                                     "CLEVER_2",
+                                                     "CLEVER_3_1",
+                                                     "CLEVER_3_2",
+                                                     "DESPERATE_1",
+                                                     "FAILED",
+                                                 ],
+                                                 "description" => "Étape de l'algorithme qui a conclu",
+                                             ],
+                                             "cpuscsv" => ["type" => "string", "description" => "Fichier CSV utilisé"],
+                                             "linenum" => ["type" => "string", "description" => "Ligne du CPU retenu"],
+                                             "line" => ["type" => "string", "description" => "Libellé du CPU retenu"],
+                                             "details" => [
+                                                 "type" => "array",
+                                                 "items" => ["type" => "string"],
+                                                 "description" => "Trace de débogage du matching",
+                                             ],
+                                             "version" => ["type" => "string", "description" => "Version du module cpumarks"],
+                                         ],
+                                     ],
+                                 ],
+                             ],
+                         ],
+                         "400" => ["description" => "Nom de CPU réservé (update, version, debug, csv)"],
+                         "500" => ["description" => "Échec de l'exécution ou réponse invalide du script"],
                      ],
                      "security" => [],
                  ],
@@ -4250,16 +4356,86 @@ function addCurlCodeSamples($swagger)
              "/cpu/csv" => [
                  "get" => [
                      "tags" => ["benchmark"],
-                     "summary" => "Récupère les données CPU en CSV",
+                     "summary" => "Téléchargement du CSV des benchmarks CPU",
                      "description" =>
-                         "Ne pas utiliser la fonction Try It Out (crash de la page), appeler la page depuis votre navigateur directement pour tester. (eg: https://" .
-                         config("hostname") . "/api/cpu/csv )",
+                         "Renvoie le CSV courant (cible du lien symbolique `marksdata/cpumarks.csv`) en pièce jointe. Le nom de fichier est daté (ex. `cpumarks-20261031.230006.csv`). Ouvrir l'URL dans le navigateur pour télécharger.",
                      "responses" => [
                          "200" => [
                              "description" => "Fichier CSV des benchmarks CPU",
                              "content" => [
                                  "text/csv" => [
                                      "schema" => ["type" => "string", "format" => "binary"],
+                                 ],
+                             ],
+                         ],
+                         "404" => ["description" => "Fichier CSV introuvable"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/cpu/version" => [
+                 "get" => [
+                     "tags" => ["benchmark"],
+                     "summary" => "Version du module cpumarks et du CSV courant",
+                     "description" =>
+                         "Retourne la version du projet cpumarks, les auteurs, les chemins du CSV et le nombre de CPU qu'il contient.",
+                     "responses" => [
+                         "200" => [
+                             "description" => "Informations de version",
+                             "content" => [
+                                 "application/json" => [
+                                     "schema" => [
+                                         "type" => "object",
+                                         "properties" => [
+                                             "project_version" => ["type" => "string"],
+                                             "authors" => ["type" => "string"],
+                                             "csv_symlink" => ["type" => "string", "nullable" => true],
+                                             "csv_target" => ["type" => "string", "nullable" => true, "description" => "Nom du fichier cible du lien symbolique"],
+                                             "csv_file" => ["type" => "string", "nullable" => true],
+                                             "csv_basename" => ["type" => "string", "nullable" => true],
+                                             "total_cpus" => ["type" => "string", "description" => "Nombre de CPU (chaîne de caractères)"],
+                                         ],
+                                     ],
+                                 ],
+                             ],
+                         ],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/cpu/update" => [
+                 "get" => [
+                     "tags" => ["benchmark"],
+                     "summary" => "Mettre à jour le CSV des benchmarks CPU",
+                     "description" =>
+                         "Récupère les données via le proxy, écrit `cpumarks-prefetch.json`, puis exécute `marksdata/update_the_db.py` avec le venv Python. Opération de maintenance potentiellement longue : elle remplace le CSV courant. En cas de succès, renvoie la sortie texte du script (JSON par ligne).",
+                     "responses" => [
+                         "200" => [
+                             "description" => "Mise à jour effectuée (sortie du script Python)",
+                             "content" => [
+                                 "text/plain" => [
+                                     "schema" => ["type" => "string"],
+                                 ],
+                             ],
+                         ],
+                         "400" => ["description" => "Échec de la mise à jour (raison dans `reason` si disponible)"],
+                         "504" => ["description" => "Proxy cpubenchmark indisponible"],
+                     ],
+                     "security" => [],
+                 ],
+             ],
+             "/cpu/debug" => [
+                 "get" => [
+                     "tags" => ["benchmark"],
+                     "summary" => "Diagnostic de l'environnement cpumarks",
+                     "description" =>
+                         "Endpoint de diagnostic : chemins configurés, présence du venv Python, version de Python, contenu du dossier cpumarks. Réponse en texte brut, réservée au dépannage.",
+                     "responses" => [
+                         "200" => [
+                             "description" => "Informations de diagnostic",
+                             "content" => [
+                                 "text/plain" => [
+                                     "schema" => ["type" => "string"],
                                  ],
                              ],
                          ],
